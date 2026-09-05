@@ -38,7 +38,10 @@ jobs:
         run: npm ci
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+        # wrangler は package.json の devDependency(ロックファイルで 4.x に固定)。
+        # npm ci 済みなのでアクションはローカルの wrangler を使う。
+        # (v3 が 3.90.0 を入れた結果 wrangler.jsonc 未対応の 3.x で失敗したため v4 へ)
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
