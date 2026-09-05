@@ -12,7 +12,7 @@ import mockThreadListHtml from "../../scraper/mock/sample-thread-list.html";
 import mockThreadHtml from "../../scraper/mock/sample-thread.html";
 import defaultConfigJson from "../../scraper/config.example.json";
 // @ts-expect-error -- JS モジュール(型定義なし、esbuild でバンドルされる)
-import { isMockConfig, matchesFilters, parseList, parseNextPageUrl, parseThread, resolveUrl, threadIdFromUrl } from "../../scraper/parse.mjs";
+import { isMockConfig, isSexExcluded, matchesFilters, parseList, parseNextPageUrl, parseThread, resolveUrl, threadIdFromUrl } from "../../scraper/parse.mjs";
 
 export interface Post {
   num: number;
@@ -45,7 +45,7 @@ export interface ScrapeResult {
 export interface BoardConfig {
   targetUrl: string;
   userAgent: string;
-  filters?: { titleIncludes: string[]; titleExcludes: string[] };
+  filters?: { titleIncludes: string[]; titleExcludes: string[]; sexExcludes?: string[] };
   categoryList?: {
     selector: string;
     fields: Record<string, string>;
@@ -89,6 +89,8 @@ export interface Env {
   // 実サイトのドメイン(.env / .dev.vars で指定)。ドメインのみならパス・クエリは
   // config の targetUrl から補完する(バッチ側 index.mjs と同じ挙動)
   SCRAPER_DOMAIN?: string;
+  // 性別排除キーワード(カンマ区切り、部分一致)。
+  SCRAPER_SEX_EXCLUDES?: string;
 }
 
 export function loadConfig(env: Env): BoardConfig {
@@ -106,6 +108,13 @@ export function loadConfig(env: Env): BoardConfig {
     } else {
       config = { ...config, targetUrl: envUrl.toString() };
     }
+  }
+  const sexExcludes = (env.SCRAPER_SEX_EXCLUDES ?? "")
+    .split(/[,,]/)
+    .map((kw) => kw.trim())
+    .filter(Boolean);
+  if (sexExcludes.length > 0) {
+    config = { ...config, filters: { ...config.filters, sexExcludes } };
   }
   return config;
 }
@@ -196,12 +205,14 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
         if (page === 1) {
           title = parsed.title;
         }
-        // ページ送りで重複したレス(モックで全ページ同じファイルなど)は除外
+        // ページ送りで重複したレス(モックで全ページ同じファイルなど)と
+        // 性別排除キーワードに該当するレスは除外
         for (const post of parsed.posts) {
-          if (!seenNums.has(post.num)) {
-            seenNums.add(post.num);
-            posts.push(post);
+          if (seenNums.has(post.num) || isSexExcluded(post, config.filters)) {
+            continue;
           }
+          seenNums.add(post.num);
+          posts.push(post);
         }
         const nextHref = parseNextPageUrl(html, config.thread);
         pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : null;

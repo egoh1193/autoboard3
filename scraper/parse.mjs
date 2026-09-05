@@ -218,6 +218,17 @@ export function matchesFilters(title, filters) {
   return includes.length === 0 || includes.some((s) => title.includes(s));
 }
 
+// レスの性別(post.sex)が排除キーワード(filters.sexExcludes)に該当するか。
+// キーワードは部分一致(短い語は他の性別値にもヒットし得るため指定には注意)。
+// 該当しなければ false
+export function isSexExcluded(post, filters) {
+  const excludes = filters?.sexExcludes ?? [];
+  if (excludes.length === 0 || !post?.sex) {
+    return false;
+  }
+  return excludes.some((kw) => post.sex.includes(kw));
+}
+
 // URL からスレッドのファイル名に使う ID を作る。
 // クエリに id 系パラメータがあればそれを利用し、なければ末尾パスセグメント
 // (拡張子除去)を使う。どちらも取れない場合は URL 全体の短いハッシュを用いる。

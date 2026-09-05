@@ -26,6 +26,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   isMockConfig,
+  isSexExcluded,
   matchesFilters,
   parseList,
   parseNextPageUrl,
@@ -88,6 +89,17 @@ async function loadConfig() {
     } else {
       config = { ...config, targetUrl: envUrl.toString() };
     }
+  }
+  // 性別排除キーワード(カンマ/読点区切り)。config.filters.sexExcludes より優先
+  const sexExcludes = (process.env.SCRAPER_SEX_EXCLUDES || "")
+    .split(/[,,]/)
+    .map((kw) => kw.trim())
+    .filter(Boolean);
+  if (sexExcludes.length > 0) {
+    config = {
+      ...config,
+      filters: { ...config.filters, sexExcludes },
+    };
   }
   return config;
 }
@@ -294,18 +306,22 @@ async function main() {
       }
     }
 
-    // 範囲内のレスのみ残して昇順に並べる
-    const posts = [...byNum.values()]
-      .filter(postInRange)
+    // 範囲内かつ性別排除キーワードに該当しないレスのみ残して昇順に並べる
+    const inRange = [...byNum.values()].filter(postInRange);
+    const posts = inRange
+      .filter((post) => !isSexExcluded(post, config.filters))
       .sort((a, b) => a.num - b.num);
-    return { title, posts };
+    return { title, posts, excluded: inRange.length - posts.length };
   }
 
   const detailTargets = maxDetailThreads > 0 ? threads.slice(0, maxDetailThreads) : threads;
   for (const [i, thread] of detailTargets.entries()) {
     console.log(`[scraper] (${i + 1}/${threads.length}) ${thread.title || thread.url}`);
     try {
-      const { title, posts } = await fetchThreadDetail(thread);
+      const { title, posts, excluded } = await fetchThreadDetail(thread);
+      if (excluded > 0) {
+        console.log(`[scraper]   性別排除: ${excluded} 件を除外`);
+      }
       thread.detail = { title, posts };
       // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
       if (title && !mock) {

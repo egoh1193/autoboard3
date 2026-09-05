@@ -13,7 +13,8 @@
   },
   "filters": {
     "titleIncludes": [],
-    "titleExcludes": []
+    "titleExcludes": [],
+    "sexExcludes": []
   },
   "site": {
     "cacheTtlSec": 300,
