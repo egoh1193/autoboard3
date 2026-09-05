@@ -41,10 +41,21 @@ jobs:
         # wrangler は package.json の devDependency(ロックファイルで 4.x に固定)。
         # npm ci 済みなのでアクションはローカルの wrangler を使う。
         # (v3 が 3.90.0 を入れた結果 wrangler.jsonc 未対応の 3.x で失敗したため v4 へ)
+        # Cloudflare 未設定(CLOUDFLARE_API_TOKEN 未登録)の間はデプロイをスキップする。
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy skipped (Cloudflare not configured)
+        # 前ステップをスキップした場合の案内。シークレット登録後は自動でデプロイされる
+        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: echo "CLOUDFLARE_API_TOKEN 未登録のためデプロイをスキップしました(Cloudflare 登録後は自動デプロイ)"
 
       - name: Sync scraper config to Worker secret
         env:
