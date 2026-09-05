@@ -5,8 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "scrape": "node scraper/index.mjs",
-    "notify": "node scraper/notify.mjs",
+    "scrape": "node --env-file-if-exists=.env scraper/index.mjs",
+    "notify": "node --env-file-if-exists=.env scraper/notify.mjs",
     "batch": "npm run scrape && npm run notify",
     "dev": "npx wrangler dev",
     "deploy": "npx wrangler deploy"

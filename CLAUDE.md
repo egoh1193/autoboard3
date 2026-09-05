@@ -28,6 +28,8 @@ SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_MAX_THREADS=3 npm run sc
 SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_KEYWORDS='梅田,天王寺' npm run scrape  # キーワード(カンマ区切り)ごとにスレ検索して巡回
 ```
 
+- `scrape` / `notify` / `batch` は **`.env`(ルート、gitignore)を自動読み込み**する(`--env-file-if-exists`)。テンプレートは `.env.example` — 実サイト URL・キーワード・`GIST_TOKEN`・`DISCORD_WEBHOOK_URL` 等をまとめて書ける。シェルで直接渡した環境変数が `.env` の値より優先される
+
 - テスト/リントは現状なし。JS の確認は `node --check <file>`
 - Worker のローカル実運用設定は `.dev.vars`(ルート、gitignore)に `SCRAPER_CONFIG=<config.json と同じ JSON>` を書く。未設定ならモックモード
 - バッチの実サイト URL は環境変数 `SCRAPER_TARGET_URL`(config.json の targetUrl より優先)でも指定できる。CI ではリポジトリシークレット `SCRAPER_TARGET_URL` を同キーで参照

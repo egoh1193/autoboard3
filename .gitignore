@@ -13,5 +13,8 @@ site/data/
 # wrangler 用ローカル環境変数(Worker の実運用設定を書く)
 .dev.vars
 
+# 手元実行用の環境変数(トークン・実サイト URL など)。.env.example を参照
+.env
+
 .wrangler/
 .dev.env
