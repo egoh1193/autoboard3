@@ -11,6 +11,11 @@ name: Scrape and notify
 # 新着検出の状態(.scrape-state.json)は actions/cache で次回実行へ引き継ぐ。
 # GIST_TOKEN には gist 権限を持つ PAT を指定すること
 # (Actions 既定の GITHUB_TOKEN では gist を作成できない)。
+#
+# 各実行の統計は RUN_SUMMARY_JSON(/tmp 配下)に書き出され、最後に
+# scraper/run-log.mjs 経由で log/latest-run.md に反映・コミットされる
+# (public リポジトリに「最終実行ログ 1 ファイル」を残すため。統計のみで
+#  ドメイン・URL・スレタイ・投稿内容・gist URL は含めない)。
 
 on:
   schedule:
@@ -20,6 +25,9 @@ on:
 concurrency:
   group: scrape-and-notify
   cancel-in-progress: false
+
+permissions:
+  contents: write # log/latest-run.md のコミット・push 用
 
 jobs:
   scrape-and-notify:
@@ -62,12 +70,15 @@ jobs:
           SCRAPER_KEYWORDS: ${{ secrets.SCRAPER_KEYWORDS }}
           # 性別排除キーワード(カンマ区切り、部分一致)。該当するレスを出力から除外する
           SCRAPER_SEX_EXCLUDES: ${{ secrets.SCRAPER_SEX_EXCLUDES }}
+          # 実行サマリの書き出し先(log/latest-run.md 更新の入力)
+          RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run scrape
 
       - name: Notify (Gist + Discord)
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run notify
 
       - name: Save new-thread detection state
@@ -79,3 +90,25 @@ jobs:
         with:
           path: .scrape-state.json
           key: scrape-state-v1-${{ github.run_id }}
+
+      - name: Update latest run log (log/latest-run.md)
+        # スクレイプ失敗時もサマリは書き出されているので、always() で常に記録する。
+        # 前回実行のコミットを取り込んでから(log を上書き生成)、コミット・push する。
+        # push 失敗(競合など)は次回実行で再試行されるため警告のみで継続
+        if: always()
+        env:
+          RUN_SUMMARY_JSON: /tmp/run-summary.json
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$GITHUB_REF_NAME"
+          git reset --hard FETCH_HEAD
+          node scraper/run-log.mjs
+          git add log/latest-run.md
+          if git diff --cached --quiet; then
+            echo "ログに変更がないためコミットをスキップします"
+          else
+            git commit -m "run log: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push || echo "::warning::push に失敗しました(次回実行で再試行されます)"
+          fi

@@ -151,6 +151,22 @@ async function postToDiscord(webhookUrl, content) {
   }
 }
 
+// 実行サマリ(RUN_SUMMARY_JSON)に通知結果を書き戻す。
+// gist URL・Discord webhook URL は public リポジトリのログに入らないため含めない
+async function mergeNotifySummary(status) {
+  const summaryPath = process.env.RUN_SUMMARY_JSON;
+  if (!summaryPath) return;
+  try {
+    const summary = JSON.parse(await readFile(summaryPath, "utf8"));
+    summary.notify = { status, newThreads: notifyNewThreads };
+    await writeFile(summaryPath, JSON.stringify(summary, null, 2));
+  } catch (err) {
+    console.warn(`[notify] 警告: 実行サマリの更新に失敗しました: ${err.message}`);
+  }
+}
+
+let notifyNewThreads = 0;
+
 async function main() {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   const gistToken = process.env.GIST_TOKEN;
@@ -161,6 +177,7 @@ async function main() {
   const state = await loadState(statePath);
   const knownIds = new Set(state?.knownIds ?? []);
   const newThreads = threads.filter((t) => !knownIds.has(t.id));
+  notifyNewThreads = newThreads.length;
 
   console.log(
     `[notify] スクレイプ結果: ${threads.length} 件 (生成 ${generatedAt}) / 既知: ${knownIds.size} 件 / 新着: ${newThreads.length} 件`,
@@ -170,6 +187,7 @@ async function main() {
     console.warn(
       "[notify] 警告: DISCORD_WEBHOOK_URL または GIST_TOKEN が未設定のため投稿をスキップします(状態は更新しません)",
     );
+    await mergeNotifySummary("skipped-unconfigured");
     return;
   }
 
@@ -206,8 +224,10 @@ async function main() {
 
     await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
     console.log("[notify] Discord に gist URL を投稿しました");
+    await mergeNotifySummary("posted");
   } else {
     console.log("[notify] 新着なし。投稿をスキップします");
+    await mergeNotifySummary("no-new");
   }
 
   // 現在の全スレ ID を次回の「既知」として保存する
@@ -216,7 +236,12 @@ async function main() {
   console.log(`[notify] 状態を保存しました (${statePath}, ${nextKnownIds.length} 件)`);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(`[notify] 失敗: ${err.message}`);
+  try {
+    await mergeNotifySummary("failed");
+  } catch {
+    // サマリ更新の失敗は本命のエラー報告に支障を出さない
+  }
   process.exit(1);
 });

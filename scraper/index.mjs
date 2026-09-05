@@ -41,7 +41,31 @@ const SITE_DATA_DIR = path.resolve(SCRAPER_DIR, "../site/data");
 const CONFIG_PATH = path.join(SCRAPER_DIR, "config.json");
 const EXAMPLE_CONFIG_PATH = path.join(SCRAPER_DIR, "config.example.json");
 
+// 実行サマリ(RUN_SUMMARY_JSON に JSON で書き出す)。GitHub Actions が
+// log/latest-run.md を更新するための入力。ドメイン・URL・スレタイ・投稿内容は
+// 入れない(リポジトリは public なため)。エラーメッセージもドメインをマスクする
+let runSummary = null;
+let summaryTargetUrl = "";
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function maskUrl(msg) {
+  let out = msg.split(summaryTargetUrl).join("***");
+  try {
+    const origin = new URL(summaryTargetUrl).origin;
+    out = out.split(origin).join("***");
+  } catch {
+    // summaryTargetUrl 未設定(URL なしで実行)の場合はそのまま
+  }
+  return out;
+}
+
+async function writeRunSummary() {
+  const outPath = process.env.RUN_SUMMARY_JSON;
+  if (!outPath || !runSummary) return;
+  runSummary.finishedAt = new Date().toISOString();
+  await writeFile(outPath, JSON.stringify(runSummary, null, 2));
+}
 
 // キーワード(地名など)1 件のスレ検索 URL を組み立てる。
 // targetUrl に検索パラメータを付与する形式(例: board?id=14&keyword=梅田&is_search=スレ検索)。
@@ -118,6 +142,23 @@ async function main() {
   const intervalMs = config.request?.intervalMs ?? 1500;
   const generatedAt = new Date().toISOString();
 
+  summaryTargetUrl = mock ? "" : config.targetUrl;
+  runSummary = {
+    startedAt: generatedAt,
+    finishedAt: null,
+    mode: mock ? "mock" : "real",
+    keywords: [],
+    listedThreads: 0,
+    filteredThreads: 0,
+    detailLimit: null,
+    detailThreads: 0,
+    detailOk: 0,
+    detailFailed: 0,
+    sexExcluded: 0,
+    outputWritten: false,
+    errors: [],
+  };
+
   let lastFetchedAt = 0;
 
   // 1 リクエストごとに intervalMs 以上の間隔を空けつつページを取得する。
@@ -145,6 +186,7 @@ async function main() {
     .split(/[,,]/)
     .map((kw) => kw.trim())
     .filter(Boolean);
+  runSummary.keywords = keywords;
   let categories = [];
   if (keywords.length > 0) {
     categories = keywords.map((kw) => ({ name: kw, url: buildSearchUrl(config, kw) }));
@@ -175,7 +217,9 @@ async function main() {
       try {
         html = await getHtml(pageUrl, "sample-thread-list.html");
       } catch (err) {
-        console.warn(`[scraper] 警告: ${pageUrl} の取得に失敗しました: ${err.message}`);
+        const msg = `${pageUrl} の取得に失敗しました: ${err.message}`;
+        console.warn(`[scraper] 警告: ${msg}`);
+        runSummary.errors.push(maskUrl(msg));
         break;
       }
 
@@ -201,9 +245,11 @@ async function main() {
     }
   }
   console.log(`[scraper] スレッド合計: ${allThreads.length} 件`);
+  runSummary.listedThreads = allThreads.length;
 
   // 3. タイトルによる絞り込み
   const threads = allThreads.filter((t) => matchesFilters(t.title, config.filters));
+  runSummary.filteredThreads = threads.length;
   console.log(
     `[scraper] フィルタ後: ${threads.length} 件` +
       (threads.length !== allThreads.length ? `(除外 ${allThreads.length - threads.length} 件)` : ""),
@@ -212,6 +258,7 @@ async function main() {
   // 1 スレ = 詳細ページ + メール送信ページの複数リクエストが intervalMs 以上の
   // 間隔で走るため、全件だと時間がかかる(リスト自体は制限前の全件を出力する)
   const maxDetailThreads = Number(process.env.SCRAPER_MAX_THREADS) || 0;
+  runSummary.detailLimit = maxDetailThreads || null;
   if (maxDetailThreads > 0 && threads.length > maxDetailThreads) {
     console.log(
       `[scraper] SCRAPER_MAX_THREADS=${maxDetailThreads} のため、詳細取得は先頭 ${maxDetailThreads} 件に制限します`,
@@ -315,13 +362,16 @@ async function main() {
   }
 
   const detailTargets = maxDetailThreads > 0 ? threads.slice(0, maxDetailThreads) : threads;
+  runSummary.detailThreads = detailTargets.length;
   for (const [i, thread] of detailTargets.entries()) {
     console.log(`[scraper] (${i + 1}/${threads.length}) ${thread.title || thread.url}`);
     try {
       const { title, posts, excluded } = await fetchThreadDetail(thread);
+      runSummary.sexExcluded += excluded;
       if (excluded > 0) {
         console.log(`[scraper]   性別排除: ${excluded} 件を除外`);
       }
+      runSummary.detailOk++;
       thread.detail = { title, posts };
       // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
       if (title && !mock) {
@@ -342,7 +392,9 @@ async function main() {
             } catch (err) {
               // 個別ページの失敗も続行(そのレスの email は空欄)
               mailEmailCache.set(mailPageUrl, "");
-              console.warn(`[scraper] 警告: ${mailPageUrl} の取得に失敗しました: ${err.message}`);
+              const msg = `${mailPageUrl} の取得に失敗しました: ${err.message}`;
+              console.warn(`[scraper] 警告: ${msg}`);
+              runSummary.errors.push(maskUrl(msg));
             }
           }
           post.email = mailEmailCache.get(mailPageUrl) ?? "";
@@ -350,7 +402,10 @@ async function main() {
       }
     } catch (err) {
       // 個別スレッドの失敗は全体を中断しない(一覧には resCount 掲載のまま表示)
-      console.warn(`[scraper] 警告: ${thread.url} の取得に失敗しました: ${err.message}`);
+      runSummary.detailFailed++;
+      const msg = `${thread.url} の取得に失敗しました: ${err.message}`;
+      console.warn(`[scraper] 警告: ${msg}`);
+      runSummary.errors.push(maskUrl(msg));
     }
   }
 
@@ -376,6 +431,8 @@ async function main() {
 
   const okCount = threads.filter((t) => t.detail).length;
   console.log(`[scraper] 完了: ${threads.length} 件中 ${okCount} 件の詳細を site/data/ に出力しました`);
+  runSummary.outputWritten = true;
+  await writeRunSummary();
 }
 
 // リトライ(指数バックオフ)付きで1ページを取得する
@@ -407,7 +464,16 @@ async function fetchPage(url, config) {
   throw lastError;
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(`[scraper] 失敗: ${err.message}`);
+  // 失敗時もサマリは書き出す(Actions の log/latest-run.md 更新に使う)
+  if (runSummary) {
+    runSummary.errors.push(maskUrl(err.message));
+    try {
+      await writeRunSummary();
+    } catch {
+      // サマリ書き出しの失敗は本命のエラー報告に支障を出さない
+    }
+  }
   process.exit(1);
 });
