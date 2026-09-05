@@ -1,0 +1,69 @@
+name: Scrape and notify
+
+# 定期バッチ(系統②): 掲示板をスクレイピングし、新着スレッドの詳細を
+# GitHub Gist に投稿して、その URL を Discord に通知する。
+# サイト(系統①)はアクセス時に Worker がリアルタイム取得するため、
+# このワークフローではデプロイを行わない。
+#
+# scraper/config.json はリポジトリにコミットされないため、
+# リポジトリシークレット SCRAPER_CONFIG(JSON 文字列)から復元する。
+# (未設定の場合はモックモードで実行される)
+# 新着検出の状態(.scrape-state.json)は actions/cache で次回実行へ引き継ぐ。
+# GIST_TOKEN には gist 権限を持つ PAT を指定すること
+# (Actions 既定の GITHUB_TOKEN では gist を作成できない)。
+
+on:
+  schedule:
+    - cron: "7 * * * *" # 毎時 7 分(GitHub Actions の cron は数分遅延することがある)
+  workflow_dispatch:
+
+concurrency:
+  group: scrape-and-notify
+  cancel-in-progress: false
+
+jobs:
+  scrape-and-notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore scraper config
+        env:
+          SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
+        run: |
+          if [ -n "$SCRAPER_CONFIG" ]; then
+            printf '%s' "$SCRAPER_CONFIG" > scraper/config.json
+            echo "scraper/config.json をシークレットから復元しました"
+          else
+            echo "SCRAPER_CONFIG が未設定のため、モックモードで実行します"
+          fi
+
+      - name: Restore new-thread detection state
+        uses: actions/cache/restore@v4
+        with:
+          path: .scrape-state.json
+          key: scrape-state-v1-${{ github.run_id }}
+          restore-keys: scrape-state-v1-
+
+      - name: Scrape
+        run: npm run scrape
+
+      - name: Notify (Gist + Discord)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: npm run notify
+
+      - name: Save new-thread detection state
+        uses: actions/cache/save@v4
+        with:
+          path: .scrape-state.json
+          key: scrape-state-v1-${{ github.run_id }}

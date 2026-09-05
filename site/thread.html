@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>掲示板ミラー - スレッド</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body data-page="thread">
+  <header>
+    <p class="breadcrumb"><a href="/">← スレッド一覧へ</a></p>
+    <h1 id="thread-title">…</h1>
+    <p id="thread-meta" class="thread-meta"></p>
+  </header>
+
+  <main>
+    <div id="posts"></div>
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <footer>
+    <p><a id="original-link" href="#" target="_blank" rel="noopener noreferrer">元のスレッドを開く</a></p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

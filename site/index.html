@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>掲示板ミラー - スレッド一覧</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body data-page="list">
+  <header>
+    <h1>掲示板ミラー</h1>
+    <p id="generated-at" class="generated-at"></p>
+  </header>
+
+  <main>
+    <table class="thread-table">
+      <thead>
+        <tr>
+          <th class="col-title">タイトル</th>
+          <th class="col-count">レス数</th>
+          <th class="col-created">作成日時</th>
+        </tr>
+      </thead>
+      <tbody id="thread-rows">
+        <tr>
+          <td colspan="3" class="loading">読み込み中…</td>
+        </tr>
+      </tbody>
+    </table>
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <footer>
+    <p>このサイトはアクセス時に外部の掲示板から最新情報を取得して表示します(短時間キャッシュあり)。</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+node_modules/
+npm-debug.log*
+
+# 実環境のスクレイパー設定(対象URL・セレクタ)は example のみ管理
+scraper/config.json
+
+# バッチで生成されるデータ(Actions 内で生成しリポジトリにはコミットしない)
+site/data/
+
+# 新着検出の状態(GitHub Actions の actions/cache で保持)
+.scrape-state.json
+
+# wrangler 用ローカル環境変数(Worker の実運用設定を書く)
+.dev.vars
+
+.wrangler/
+.dev.env

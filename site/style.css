@@ -1,0 +1,175 @@
+:root {
+  --bg: #f4f4f0;
+  --card-bg: #ffffff;
+  --text: #333333;
+  --border: #dddddd;
+  --accent: #006699;
+  --accent-dark: #004c73;
+  --muted: #888888;
+  --highlight: #fff8d6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+}
+
+header,
+main,
+footer {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+header {
+  padding-top: 24px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0.2rem 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.generated-at,
+.thread-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* --- スレッド一覧 --- */
+
+.thread-table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+.thread-table th,
+.thread-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.thread-table th {
+  background: #ecece6;
+  font-size: 0.8rem;
+}
+
+.col-count,
+.col-created {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.category-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ecece6;
+  color: var(--muted);
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+.loading {
+  color: var(--muted);
+}
+
+/* --- スレッド詳細 --- */
+
+.post {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  padding: 8px 12px;
+}
+
+.post:nth-child(even) {
+  background: var(--highlight);
+}
+
+.post-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.post-num {
+  color: var(--accent-dark);
+  font-weight: bold;
+}
+
+.post-name {
+  color: #117743;
+  font-weight: bold;
+}
+
+.post-meta {
+  color: var(--muted);
+}
+
+.post-body {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.post-images {
+  margin-top: 6px;
+}
+
+.post-images-label {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.post-image-link {
+  display: block;
+  color: var(--link, #4488cc);
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.error {
+  background: #ffe9e9;
+  border: 1px solid #e0a0a0;
+  color: #992222;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+
+footer {
+  padding-bottom: 32px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}

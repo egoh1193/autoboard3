@@ -1,0 +1,58 @@
+{
+  "targetUrl": "https://hoge.com/public/board/?id=14",
+  "userAgent": "board-mirror/0.1 (personal mirror; contact: you@example.com)",
+  "request": {
+    "intervalMs": 1500,
+    "timeoutMs": 15000,
+    "retries": 3,
+    "retryBackoffMs": 2000
+  },
+  "filters": {
+    "titleIncludes": [],
+    "titleExcludes": []
+  },
+  "site": {
+    "cacheTtlSec": 300,
+    "maxDetailThreads": 20,
+    "maxThreadPages": 2
+  },
+  "threadList": {
+    "selector": "font[size='4']:has(span.thread-title)",
+    "fields": {
+      "title": "span.thread-title@text",
+      "url": "a@href"
+    },
+    "fieldPatterns": {
+      "resCount": "#(\\d+)"
+    },
+    "nextPage": "center a:contains('→')@href",
+    "maxPages": 2
+  },
+  "thread": {
+    "parser": "hr-split",
+    "titleSelector": "font[size='+2']@text",
+    "titleStrip": "^[□■]\\s*",
+    "post": {
+      "requireNumberSpan": "span[id^='b']",
+      "numberPattern": "^\\s*(\\d+)",
+      "namePattern": "^\\d+\\s*\\[([^\\]]*)\\]",
+      "opPattern": "\\d+\\s*\\[☆\\]",
+      "datePattern": "\\d{4}-\\d{2}-\\d{2}[ \\t]+\\d{1,2}:\\d{2}(?::\\d{2})?",
+      "imagePattern": "src=\"([^\"]*assets/img/bbs/[^\"]+)\"",
+      "metaPatterns": {
+        "age": "年齢[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
+        "sex": "性別[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
+        "looks": "ﾙｯｸｽ[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
+        "wish": "(?:^|\\n)([^\\n]{0,8}希望)(?=\\n)",
+        "ip": "IP[^\\S\\n]*:[^\\S\\n]*([^\\n]*)",
+        "device": "機種情報[^\\S\\n]*:[^\\S\\n]*([^\\n]*)"
+      }
+    },
+    "nextPage": "center a:contains('→')@href",
+    "maxPages": 3,
+    "mailPage": {
+      "linkPattern": "href=\"([^\"]*/public/mail/[^\"]*)\"",
+      "emailPattern": "mailto:([^\"'<>\\s]+)"
+    }
+  }
+}

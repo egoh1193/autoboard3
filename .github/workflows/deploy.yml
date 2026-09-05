@@ -1,0 +1,57 @@
+name: Deploy site
+
+# 系統①(サイト本体)のデプロイ。
+# サイトはアクセス時に Worker がリアルタイムでスクレイピングするため、
+# 事前のデータ生成は不要。Worker/フロントのコード変更時にデプロイする。
+#
+# Worker の実運用設定(セレクタ等)はシークレット SCRAPER_CONFIG を
+# Worker secret SCRAPER_CONFIG として同期する(設定が変わるたびに自動反映)。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "worker/**"
+      - "wrangler.jsonc"
+      - "scraper/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Sync scraper config to Worker secret
+        env:
+          SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$SCRAPER_CONFIG" ]; then
+            printf '%s' "$SCRAPER_CONFIG" | npx wrangler secret put SCRAPER_CONFIG
+            echo "Worker secret SCRAPER_CONFIG を更新しました"
+          else
+            echo "SCRAPER_CONFIG が未設定のため、Worker はモックモードで動作します"
+          fi

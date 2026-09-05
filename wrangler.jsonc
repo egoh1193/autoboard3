@@ -1,0 +1,18 @@
+{
+  // Cloudflare Workers 設定。
+  // サイト本体は site/ 以下の静的アセットとして配信し、
+  // /data/* の JSON はアクセス時に Worker がリアルタイムで
+  // スクレイピングして生成する(worker/src/scrape.ts)。
+  "name": "board-mirror",
+  "main": "worker/src/worker.ts",
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS",
+    // 静的データはもう存在しないため、/data/* は常に Worker が処理する
+    "run_worker_first": ["/data/*"]
+  },
+  // scraper/mock/*.html を文字列として import するためのルール
+  "rules": [{ "type": "Text", "globs": ["**/*.html"] }]
+}

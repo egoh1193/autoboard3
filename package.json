@@ -1,0 +1,17 @@
+{
+  "name": "board-mirror",
+  "version": "0.1.0",
+  "description": "掲示板をスクレイピングして Cloudflare Workers 上で再表示するサイト",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "scrape": "node scraper/index.mjs",
+    "notify": "node scraper/notify.mjs",
+    "batch": "npm run scrape && npm run notify",
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2"
+  }
+}
