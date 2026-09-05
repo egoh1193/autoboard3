@@ -24,6 +24,7 @@ npm run dev      # wrangler dev → http://localhost:8787(系統①の動作確�
 npm run deploy   # Cloudflare Workers へデプロイ
 MOCK=1 npm run scrape  # モックモード明示指定
 SCRAPER_TARGET_URL='https://実サイトのURL' npm run scrape  # 実モードで実行(URL は環境変数で与える)
+SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_MAX_THREADS=3 npm run scrape  # 詳細取得を先頭3スレに制限(手元の動作確認用)
 ```
 
 - テスト/リントは現状なし。JS の確認は `node --check <file>`

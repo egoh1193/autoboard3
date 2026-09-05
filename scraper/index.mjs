@@ -150,6 +150,15 @@ async function main() {
     `[scraper] フィルタ後: ${threads.length} 件` +
       (threads.length !== allThreads.length ? `(除外 ${allThreads.length - threads.length} 件)` : ""),
   );
+  // 詳細取得の件数上限(環境変数 SCRAPER_MAX_THREADS)。手元での動作確認用。
+  // 1 スレ = 詳細ページ + メール送信ページの複数リクエストが intervalMs 以上の
+  // 間隔で走るため、全件だと時間がかかる(リスト自体は制限前の全件を出力する)
+  const maxDetailThreads = Number(process.env.SCRAPER_MAX_THREADS) || 0;
+  if (maxDetailThreads > 0 && threads.length > maxDetailThreads) {
+    console.log(
+      `[scraper] SCRAPER_MAX_THREADS=${maxDetailThreads} のため、詳細取得は先頭 ${maxDetailThreads} 件に制限します`,
+    );
+  }
   if (threads.length === 0) {
     throw new Error("フィルタ条件に一致するスレッドがありません。filters の設定を確認してください。");
   }
@@ -192,7 +201,8 @@ async function main() {
     return { title, posts };
   }
 
-  for (const [i, thread] of threads.entries()) {
+  const detailTargets = maxDetailThreads > 0 ? threads.slice(0, maxDetailThreads) : threads;
+  for (const [i, thread] of detailTargets.entries()) {
     console.log(`[scraper] (${i + 1}/${threads.length}) ${thread.title || thread.url}`);
     try {
       const { title, posts } = await fetchThreadDetail(thread);
