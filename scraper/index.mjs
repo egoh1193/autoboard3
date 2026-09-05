@@ -1,9 +1,11 @@
 // 定期バッチ用スクレイパーのエントリポイント。
 //
 // 取得の流れ(パース・フィルタの共有ロジックは parse.mjs):
-//   1. targetUrl(カテゴリ一覧)を取得し、カテゴリごとのスレッド一覧 URL を列挙
+//   1. 巡回対象の決定。環境変数 SCRAPER_KEYWORDS(カンマ区切り)があれば
+//      キーワードごとにスレ検索 URL(targetUrl + 検索パラメータ)を組み立てる
+//      - SCRAPER_KEYWORDS がなければ targetUrl(カテゴリ一覧)からカテゴリを列挙
 //      - categoryList の設定がない場合、targetUrl を直接スレッド一覧として扱う
-//   2. 各カテゴリのスレッド一覧(ページネーション対応)を取得
+//   2. 各キーワード・カテゴリのスレッド一覧(ページネーション対応)を取得
 //   3. filters でスレッドタイトルを絞り込み
 //   4. 該当スレッドの本文ページを取得してレス配列をパース
 //
@@ -37,6 +39,19 @@ const CONFIG_PATH = path.join(SCRAPER_DIR, "config.json");
 const EXAMPLE_CONFIG_PATH = path.join(SCRAPER_DIR, "config.example.json");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// キーワード(地名など)1 件のスレ検索 URL を組み立てる。
+// targetUrl に検索パラメータを付与する形式(例: board?id=14&keyword=梅田&is_search=スレ検索)。
+// パラメータ名・付随パラメータは config.search で上書き可能
+function buildSearchUrl(config, keyword) {
+  const search = config.search ?? {};
+  const url = new URL(config.targetUrl);
+  url.searchParams.set(search.keywordParam ?? "keyword", keyword);
+  for (const [key, value] of Object.entries(search.extraParams ?? { is_search: "スレ検索" })) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
 
 // 既定値(config.example.json)に config.json を上書きマージして返す。
 // 実サイトの URL は環境変数 SCRAPER_TARGET_URL でも指定できる
@@ -92,9 +107,22 @@ async function main() {
     }
   }
 
-  // 1. カテゴリ一覧の取得(categoryList 設定がない場合は targetUrl をスレッド一覧として扱う)
+  // 1. 巡回対象の決定。
+  //    環境変数 SCRAPER_KEYWORDS(カンマ区切り)があれば、キーワードごとに
+  //    スレ検索 URL を組み立てて各検索結果をスレッド一覧として扱う。
+  //    なければ categoryList の取得、それもなければ targetUrl を直接スレッド一覧として扱う
+  const keywords = (process.env.SCRAPER_KEYWORDS || "")
+    .split(/[,,]/)
+    .map((kw) => kw.trim())
+    .filter(Boolean);
   let categories = [];
-  if (config.categoryList?.selector) {
+  if (keywords.length > 0) {
+    categories = keywords.map((kw) => ({ name: kw, url: buildSearchUrl(config, kw) }));
+    console.log(`[scraper] キーワード検索: ${keywords.join(" / ")}`);
+    for (const category of categories) {
+      console.log(`[scraper]   ${category.name} → ${category.url}`);
+    }
+  } else if (config.categoryList?.selector) {
     const listHtml = await getHtml(config.targetUrl, "sample.html");
     categories = parseList(listHtml, config.categoryList)
       .map((row) => ({ name: row.name || "", url: resolveUrl(row.url, config.targetUrl) }))

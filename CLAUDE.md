@@ -25,6 +25,7 @@ npm run deploy   # Cloudflare Workers へデプロイ
 MOCK=1 npm run scrape  # モックモード明示指定
 SCRAPER_TARGET_URL='https://実サイトのURL' npm run scrape  # 実モードで実行(URL は環境変数で与える)
 SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_MAX_THREADS=3 npm run scrape  # 詳細取得を先頭3スレに制限(手元の動作確認用)
+SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_KEYWORDS='梅田,天王寺' npm run scrape  # キーワード(カンマ区切り)ごとにスレ検索して巡回
 ```
 
 - テスト/リントは現状なし。JS の確認は `node --check <file>`
@@ -38,7 +39,7 @@ SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_MAX_THREADS=3 npm run sc
 
 Node バッチと Worker の**両方から import される**唯一のロジック。ここは Node 専用機能(fs 等)を使わないこと(Worker でバンドルされるため)。セレクタはすべて config に置かれ、コードにハードコードされない。対象サイトの構造変更は config 修正で対応する。
 
-巡回は 4 段階: ①(オプション)`categoryList` で掲示板一覧を列挙 — 未設定なら `targetUrl` を直接スレ一覧として扱う ②スレ一覧(`threadList.nextPage` + `maxPages` でページング) ③`filters.titleIncludes/titleExcludes` でタイトル絞り込み ④該当スレ本文(`thread.nextPage` + `maxPages` でスレッド内ページ送り)→ レス配列。
+巡回は 4 段階: ①(オプション)環境変数 `SCRAPER_KEYWORDS`(カンマ区切り)があればキーワードごとにスレ検索 URL(`targetUrl` + `search` ブロックのパラメータ)を組み立て、なければ(オプション)`categoryList` で掲示板一覧を列挙 — どちらも未設定なら `targetUrl` を直接スレ一覧として扱う ②スレ一覧(`threadList.nextPage` + `maxPages` でページング、キーワード間の重複は ID で除去) ③`filters.titleIncludes/titleExcludes` でタイトル絞り込み ④該当スレ本文(`thread.nextPage` + `maxPages` でスレッド内ページ送り)→ レス配列。
 
 **本文パーサーは2方式**(`thread.parser` で切り替え、実装は parse.mjs):
 - 未設定: セレクタベース(`postsSelector` + `fields`)。各レスが class 付き要素に囲まれた HTML 向け

@@ -1,5 +1,9 @@
 {
   "targetUrl": "https://hoge.com/public/board/?id=14",
+  "search": {
+    "keywordParam": "keyword",
+    "extraParams": { "is_search": "スレ検索" }
+  },
   "userAgent": "board-mirror/0.1 (personal mirror; contact: you@example.com)",
   "request": {
     "intervalMs": 1500,
