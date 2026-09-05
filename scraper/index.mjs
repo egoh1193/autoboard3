@@ -11,6 +11,8 @@
 // scraper/config.json が存在しない、または環境変数 MOCK=1 のときは
 // scraper/mock/ 以下のサンプル HTML から同一形式の JSON を生成する(モックモード)。
 // セレクタ等の既定値は scraper/config.example.json を使用する。
+// 実サイトの targetUrl は環境変数 SCRAPER_TARGET_URL でも指定可能
+// (config.json の targetUrl より優先。モック判定は環境変数より先に MOCK=1 が勝つ)。
 //
 // 出力:
 //   site/data/threads.json        … スレッド一覧 (+ generatedAt)
@@ -36,18 +38,25 @@ const EXAMPLE_CONFIG_PATH = path.join(SCRAPER_DIR, "config.example.json");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// 既定値(config.example.json)に config.json を上書きマージして返す
+// 既定値(config.example.json)に config.json を上書きマージして返す。
+// 実サイトの URL は環境変数 SCRAPER_TARGET_URL でも指定できる
+// (config.json やシークレットに書きたくない/書けない場合の上書き。空文字は無視)
 async function loadConfig() {
   const defaults = JSON.parse(await readFile(EXAMPLE_CONFIG_PATH, "utf8"));
+  let config = defaults;
   try {
     const raw = await readFile(CONFIG_PATH, "utf8");
-    return { ...defaults, ...JSON.parse(raw) };
+    config = { ...defaults, ...JSON.parse(raw) };
   } catch (err) {
-    if (err.code === "ENOENT") {
-      return defaults;
+    if (err.code !== "ENOENT") {
+      throw err;
     }
-    throw err;
   }
+  const targetUrl = process.env.SCRAPER_TARGET_URL;
+  if (targetUrl) {
+    config = { ...config, targetUrl };
+  }
+  return config;
 }
 
 async function main() {
@@ -55,7 +64,9 @@ async function main() {
   const mock = process.env.MOCK === "1" || isMockConfig(config);
 
   if (mock && process.env.MOCK !== "1") {
-    console.log("[scraper] 参考: config.json の targetUrl を設定すると実サイトを取得します");
+    console.log(
+      "[scraper] 参考: SCRAPER_TARGET_URL 環境変数または config.json の targetUrl で実サイトを取得できます",
+    );
   }
   console.log(`[scraper] ${mock ? "モックモード" : `対象: ${config.targetUrl}`} で実行します`);
 

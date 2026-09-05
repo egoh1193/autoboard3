@@ -23,10 +23,12 @@ npm run batch    # scrape + notify
 npm run dev      # wrangler dev → http://localhost:8787(系統①の動作確認)
 npm run deploy   # Cloudflare Workers へデプロイ
 MOCK=1 npm run scrape  # モックモード明示指定
+SCRAPER_TARGET_URL='https://実サイトのURL' npm run scrape  # 実モードで実行(URL は環境変数で与える)
 ```
 
 - テスト/リントは現状なし。JS の確認は `node --check <file>`
 - Worker のローカル実運用設定は `.dev.vars`(ルート、gitignore)に `SCRAPER_CONFIG=<config.json と同じ JSON>` を書く。未設定ならモックモード
+- バッチの実サイト URL は環境変数 `SCRAPER_TARGET_URL`(config.json の targetUrl より優先)でも指定できる。CI ではリポジトリシークレット `SCRAPER_TARGET_URL` を同キーで参照
 - `scraper/config.json` は gitignore され、CI ではリポジトリシークレット `SCRAPER_CONFIG` から復元される
 
 ## アーキテクチャ

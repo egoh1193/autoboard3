@@ -54,6 +54,10 @@ jobs:
           restore-keys: scrape-state-v1-
 
       - name: Scrape
+        env:
+          # 実サイトの URL をシークレット SCRAPER_TARGET_URL から与える
+          # (未登録なら config.json 依存、どちらもなければモックモード)
+          SCRAPER_TARGET_URL: ${{ secrets.SCRAPER_TARGET_URL }}
         run: npm run scrape
 
       - name: Notify (Gist + Discord)
