@@ -13,7 +13,7 @@
 // scraper/config.json が存在しない、または環境変数 MOCK=1 のときは
 // scraper/mock/ 以下のサンプル HTML から同一形式の JSON を生成する(モックモード)。
 // セレクタ等の既定値は scraper/config.example.json を使用する。
-// 実サイトの targetUrl は環境変数 SCRAPER_TARGET_URL でも指定可能
+// 実サイトのドメインは環境変数 SCRAPER_DOMAIN でも指定可能
 // (config.json の targetUrl より優先。ドメインのみ指定した場合はパス・クエリを
 //  config の targetUrl から補完。モック判定は環境変数より先に MOCK=1 が勝つ)。
 //
@@ -63,9 +63,9 @@ function buildThreadPageUrl(threadUrl, pageParam, page) {
 }
 
 // 既定値(config.example.json)に config.json を上書きマージして返す。
-// 実サイトの URL は環境変数 SCRAPER_TARGET_URL でも指定できる
+// 実サイトのドメインは環境変数 SCRAPER_DOMAIN でも指定できる
 // (config.json やシークレットに書きたくない/書けない場合の上書き。空文字は無視)。
-// ドメインのみ(例: example.com / https://example.com)でもよく、その場合は
+// 例: example.com / https://example.com のようなドメイン(オリジン)指定なら
 // パス・クエリを設定の targetUrl から補完する。フル URL を書けばそちらを優先
 async function loadConfig() {
   const defaults = JSON.parse(await readFile(EXAMPLE_CONFIG_PATH, "utf8"));
@@ -78,9 +78,9 @@ async function loadConfig() {
       throw err;
     }
   }
-  const targetUrl = process.env.SCRAPER_TARGET_URL;
-  if (targetUrl) {
-    const envUrl = new URL(targetUrl.includes("://") ? targetUrl : `https://${targetUrl}`);
+  const domain = process.env.SCRAPER_DOMAIN;
+  if (domain) {
+    const envUrl = new URL(domain.includes("://") ? domain : `https://${domain}`);
     if (envUrl.pathname === "/" && envUrl.search === "") {
       // ドメイン(オリジン)のみ → パス・クエリは config の targetUrl から流用
       const configUrl = new URL(config.targetUrl);
@@ -98,7 +98,7 @@ async function main() {
 
   if (mock && process.env.MOCK !== "1") {
     console.log(
-      "[scraper] 参考: SCRAPER_TARGET_URL 環境変数または config.json の targetUrl で実サイトを取得できます",
+      "[scraper] 参考: SCRAPER_DOMAIN 環境変数または config.json の targetUrl で実サイトを取得できます",
     );
   }
   console.log(`[scraper] ${mock ? "モックモード" : `対象: ${config.targetUrl}`} で実行します`);

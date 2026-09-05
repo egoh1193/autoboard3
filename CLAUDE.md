@@ -23,16 +23,16 @@ npm run batch    # scrape + notify
 npm run dev      # wrangler dev → http://localhost:8787(系統①の動作確認)
 npm run deploy   # Cloudflare Workers へデプロイ
 MOCK=1 npm run scrape  # モックモード明示指定
-SCRAPER_TARGET_URL='実サイトのドメイン' npm run scrape  # 実モードで実行(ドメインのみ可。パス・クエリは config.targetUrl から補完)
-SCRAPER_TARGET_URL='実サイトのドメイン' SCRAPER_MAX_THREADS=3 npm run scrape  # 詳細取得を先頭3スレに制限(手元の動作確認用)
-SCRAPER_TARGET_URL='実サイトのドメイン' SCRAPER_KEYWORDS='梅田,天王寺' npm run scrape  # キーワード(カンマ区切り)ごとにスレ検索して巡回
+SCRAPER_DOMAIN='実サイトのドメイン' npm run scrape  # 実モードで実行(ドメインのみ可。パス・クエリは config.targetUrl から補完)
+SCRAPER_DOMAIN='実サイトのドメイン' SCRAPER_MAX_THREADS=3 npm run scrape  # 詳細取得を先頭3スレに制限(手元の動作確認用)
+SCRAPER_DOMAIN='実サイトのドメイン' SCRAPER_KEYWORDS='梅田,天王寺' npm run scrape  # キーワード(カンマ区切り)ごとにスレ検索して巡回
 ```
 
 - `scrape` / `notify` / `batch` は **`.env`(ルート、gitignore)を自動読み込み**する(`--env-file-if-exists`)。テンプレートは `.env.example` — 実サイト URL・キーワード・`GIST_TOKEN`・`DISCORD_WEBHOOK_URL` 等をまとめて書ける。シェルで直接渡した環境変数が `.env` の値より優先される
 
 - テスト/リントは現状なし。JS の確認は `node --check <file>`
 - Worker のローカル実運用設定は `.dev.vars`(ルート、gitignore)に `SCRAPER_CONFIG=<config.json と同じ JSON>` を書く。未設定ならモックモード
-- バッチの実サイト URL は環境変数 `SCRAPER_TARGET_URL`(config.json の targetUrl より優先)でも指定できる。CI ではリポジトリシークレット `SCRAPER_TARGET_URL` を同キーで参照
+- バッチの実サイト URL は環境変数 `SCRAPER_DOMAIN`(config.json の targetUrl より優先)でも指定できる。CI ではリポジトリシークレット `SCRAPER_DOMAIN` を同キーで参照
 - `scraper/config.json` は gitignore され、CI ではリポジトリシークレット `SCRAPER_CONFIG` から復元される
 
 ## アーキテクチャ
