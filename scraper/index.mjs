@@ -14,7 +14,8 @@
 // scraper/mock/ 以下のサンプル HTML から同一形式の JSON を生成する(モックモード)。
 // セレクタ等の既定値は scraper/config.example.json を使用する。
 // 実サイトの targetUrl は環境変数 SCRAPER_TARGET_URL でも指定可能
-// (config.json の targetUrl より優先。モック判定は環境変数より先に MOCK=1 が勝つ)。
+// (config.json の targetUrl より優先。ドメインのみ指定した場合はパス・クエリを
+//  config の targetUrl から補完。モック判定は環境変数より先に MOCK=1 が勝つ)。
 //
 // 出力:
 //   site/data/threads.json        … スレッド一覧 (+ generatedAt)
@@ -63,7 +64,9 @@ function buildThreadPageUrl(threadUrl, pageParam, page) {
 
 // 既定値(config.example.json)に config.json を上書きマージして返す。
 // 実サイトの URL は環境変数 SCRAPER_TARGET_URL でも指定できる
-// (config.json やシークレットに書きたくない/書けない場合の上書き。空文字は無視)
+// (config.json やシークレットに書きたくない/書けない場合の上書き。空文字は無視)。
+// ドメインのみ(例: example.com / https://example.com)でもよく、その場合は
+// パス・クエリを設定の targetUrl から補完する。フル URL を書けばそちらを優先
 async function loadConfig() {
   const defaults = JSON.parse(await readFile(EXAMPLE_CONFIG_PATH, "utf8"));
   let config = defaults;
@@ -77,7 +80,14 @@ async function loadConfig() {
   }
   const targetUrl = process.env.SCRAPER_TARGET_URL;
   if (targetUrl) {
-    config = { ...config, targetUrl };
+    const envUrl = new URL(targetUrl.includes("://") ? targetUrl : `https://${targetUrl}`);
+    if (envUrl.pathname === "/" && envUrl.search === "") {
+      // ドメイン(オリジン)のみ → パス・クエリは config の targetUrl から流用
+      const configUrl = new URL(config.targetUrl);
+      config = { ...config, targetUrl: envUrl.origin + configUrl.pathname + configUrl.search };
+    } else {
+      config = { ...config, targetUrl: envUrl.toString() };
+    }
   }
   return config;
 }
