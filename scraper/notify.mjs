@@ -134,17 +134,10 @@ async function createGist(token, apiUrl, filename, description, content) {
   return data.html_url;
 }
 
-// Discord に投稿する短いメッセージ(本文は載せず gist URL のみ)
-function buildDiscordMessage(newThreads, gistUrl, isFirstRun, totalThreads) {
-  const header = isFirstRun
-    ? `初回実行のため、現在の対象スレ ${totalThreads} 件を gist にまとめました(次回からは新着のみ)`
-    : `新着スレを ${newThreads.length} 件検出しました`;
-  const titles = newThreads
-    .map((t) => t.title || "(タイトルなし)")
-    .slice(0, 10)
-    .map((t) => `・${t}`);
-  const rest = newThreads.length > 10 ? [`…ほか ${newThreads.length - 10} 件`] : [];
-  return [header, "", ...titles, ...rest, "", gistUrl].join("\n");
+// Discord に投稿する短いメッセージ(本文・スレタイは載せず gist URL のみ)。
+// 詳細はすべて gist 側に任せる
+function buildDiscordMessage(gistUrl) {
+  return `更新がありました。\n${gistUrl}`;
 }
 
 async function postToDiscord(webhookUrl, content) {
@@ -211,10 +204,7 @@ async function main() {
     );
     console.log(`[notify] Gist を作成しました: ${gistUrl}`);
 
-    await postToDiscord(
-      webhookUrl,
-      buildDiscordMessage(newThreads, gistUrl, state === null, threads.length),
-    );
+    await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
     console.log("[notify] Discord に gist URL を投稿しました");
   } else {
     console.log("[notify] 新着なし。投稿をスキップします");
