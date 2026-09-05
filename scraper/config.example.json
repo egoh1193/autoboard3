@@ -54,6 +54,9 @@
     },
     "nextPage": "center a:contains('→')@href",
     "maxPages": 3,
+    "pageParam": "p",
+    "lastPagePattern": "[?&]p=(\\d+)",
+    "maxAgeDays": 2,
     "mailPage": {
       "linkPattern": "href=\"([^\"]*/public/mail/[^\"]*)\"",
       "emailPattern": "mailto:([^\"'<>\\s]+)"

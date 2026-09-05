@@ -39,7 +39,11 @@ SCRAPER_TARGET_URL='https://実サイトのURL' SCRAPER_KEYWORDS='梅田,天王�
 
 Node バッチと Worker の**両方から import される**唯一のロジック。ここは Node 専用機能(fs 等)を使わないこと(Worker でバンドルされるため)。セレクタはすべて config に置かれ、コードにハードコードされない。対象サイトの構造変更は config 修正で対応する。
 
+対象サイトは 3 種類のページで構成される(**A** スレ一覧 / **B** スレ本文 / **C** 個別メールページ)。B のページ送りは昇順(p=1 が最古)で、URL は `thread/index?id=NNN&p=2` 形式。
+
 巡回は 4 段階: ①(オプション)環境変数 `SCRAPER_KEYWORDS`(カンマ区切り)があればキーワードごとにスレ検索 URL(`targetUrl` + `search` ブロックのパラメータ)を組み立て、なければ(オプション)`categoryList` で掲示板一覧を列挙 — どちらも未設定なら `targetUrl` を直接スレ一覧として扱う ②スレ一覧(`threadList.nextPage` + `maxPages` でページング、キーワード間の重複は ID で除去) ③`filters.titleIncludes/titleExcludes` でタイトル絞り込み ④該当スレ本文(`thread.nextPage` + `maxPages` でスレッド内ページ送り)→ レス配列。
+
+**B ページの取得範囲は実行時から `thread.maxAgeDays`(既定 2)日前まで**: p=1 のナビから `thread.lastPagePattern` で最終ページ番号を推定し、新しい側(p=最終ページ)から遡って、全レスが範囲外になったページで打ち切る(昇順のため先頭から取ると古いページを大量取得してしまうため)。ページ URL は `thread.pageParam`(既定 `p`)で組み立て、`thread.maxPages` は 1 スレあたりの安全上限。モックモードではサンプル日時が固定のため範囲制限をしない(テスト時は環境変数 `SCRAPER_MAX_AGE_DAYS` で明示指定)。日時の解釈(`parsePostDateMs`)は UTC+9 固定で実行環境のタイムゾーンに依存しない。
 
 **本文パーサーは2方式**(`thread.parser` で切り替え、実装は parse.mjs):
 - 未設定: セレクタベース(`postsSelector` + `fields`)。各レスが class 付き要素に囲まれた HTML 向け

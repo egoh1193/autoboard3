@@ -28,6 +28,7 @@ import {
   matchesFilters,
   parseList,
   parseNextPageUrl,
+  parsePostDateMs,
   parseThread,
   resolveUrl,
   threadIdFromUrl,
@@ -50,6 +51,13 @@ function buildSearchUrl(config, keyword) {
   for (const [key, value] of Object.entries(search.extraParams ?? { is_search: "スレ検索" })) {
     url.searchParams.set(key, value);
   }
+  return url.toString();
+}
+
+// B ページ(スレ本文)のページ送り URL(p=N)を組み立てる
+function buildThreadPageUrl(threadUrl, pageParam, page) {
+  const url = new URL(threadUrl);
+  url.searchParams.set(pageParam, String(page));
   return url.toString();
 }
 
@@ -194,6 +202,35 @@ async function main() {
   // 4. 該当スレッドの本文取得(スレッド内のページ送り対応)
   const maxThreadPages = config.thread?.maxPages ?? 1;
 
+  // B ページ(スレ本文)の取得範囲: 実行時から maxAgeDays 日前まで。
+  // ページは昇順(p=1 が最古)のため、ナビの p=N リンクから最終ページを推定して
+  // 新しい側から遡り、全レスが範囲外になったページで打ち切る
+  // (先頭から順に取得すると、伸びたスレの範囲内レスのために古いページを
+  //  大量に取得することになるため)。
+  // モックのサンプル日時は固定なので、モックモードでは範囲制限をしない
+  // (テスト時は SCRAPER_MAX_AGE_DAYS 環境変数で明示指定できる)
+  const envMaxAgeDays = Number(process.env.SCRAPER_MAX_AGE_DAYS);
+  const maxAgeDays = Number.isFinite(envMaxAgeDays)
+    ? envMaxAgeDays
+    : mock
+      ? 0
+      : config.thread?.maxAgeDays ?? 2;
+  const cutoffTs = maxAgeDays > 0 ? Date.now() - maxAgeDays * 86400_000 : null;
+  if (cutoffTs !== null) {
+    console.log(
+      `[scraper] スレ内の取得範囲: 直近 ${maxAgeDays} 日(それより古いページは遡りません)`,
+    );
+  }
+  const pageParam = config.thread?.pageParam ?? "p";
+  const lastPageRe = new RegExp(config.thread?.lastPagePattern ?? "[?&]p=(\\d+)", "g");
+
+  // レスが取得範囲内(実行時から maxAgeDays 日前以降)か
+  const postInRange = (post) => {
+    if (cutoffTs === null) return true;
+    const ts = parsePostDateMs(post.date);
+    return ts !== null && ts >= cutoffTs;
+  };
+
   // 個別ページ(メール送信ページ)からのメールアドレス抽出。
   // 1 レスごとに 1 リクエスト必要なため、サブリクエスト上限のある
   // 系統①(Worker)では行わず、このバッチ側でのみ実施する。
@@ -206,26 +243,51 @@ async function main() {
   const mailEmailCache = new Map(); // メール送信ページ URL → メールアドレス(重複取得防止)
 
   async function fetchThreadDetail(thread) {
-    let pageUrl = thread.url;
-    let title = "";
-    const seenNums = new Set();
-    const posts = [];
-    for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
-      const html = await getHtml(pageUrl, "sample-thread.html");
-      const parsed = parseThread(html, config.thread);
-      if (page === 1) {
-        title = parsed.title;
+    // 先頭ページ(p=1)を取得: タイトルとページ送りナビ(最終ページの推定元)を得る
+    const firstHtml = await getHtml(thread.url, "sample-thread.html");
+    const parsedFirst = parseThread(firstHtml, config.thread);
+    const title = parsedFirst.title;
+
+    const byNum = new Map(); // レス番号 → レス(ページ送り・ページ跨ぎの重複排除)
+    const collect = (pagePosts) => {
+      for (const post of pagePosts) {
+        if (!byNum.has(post.num)) byNum.set(post.num, post);
       }
-      // ページ送りで重複したレス(モックで全ページ同じファイルなど)は除外
-      for (const post of parsed.posts) {
-        if (!seenNums.has(post.num)) {
-          seenNums.add(post.num);
-          posts.push(post);
-        }
+    };
+    collect(parsedFirst.posts);
+
+    if (cutoffTs !== null) {
+      // ナビの p=N リンクから最終ページ番号を推定し、新しい側から遡る
+      // (HTML 実体参照の &amp; は先に展開しておく)
+      let lastPage = 1;
+      for (const m of firstHtml.replace(/&amp;/g, "&").matchAll(lastPageRe)) {
+        lastPage = Math.max(lastPage, Number(m[1]));
       }
-      const nextHref = parseNextPageUrl(html, config.thread);
-      pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : "";
+      let fetchedPages = 1; // p=1 分
+      for (let p = lastPage; p >= 2 && fetchedPages < maxThreadPages; p--) {
+        const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
+        const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
+        collect(parsed.posts);
+        fetchedPages++;
+        // このページのレスがすべて範囲外なら、より古いページも範囲外なので打ち切り
+        if (!parsed.posts.some(postInRange)) break;
+      }
+    } else {
+      // 範囲制限なし: 従来どおり nextPage リンクを辿る(maxThreadPages ページまで)
+      let pageUrl = thread.url;
+      let html = firstHtml;
+      for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
+        const parsed = page === 1 ? parsedFirst : parseThread(html, config.thread);
+        collect(parsed.posts);
+        const nextHref = parseNextPageUrl(html, config.thread);
+        pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : "";
+      }
     }
+
+    // 範囲内のレスのみ残して昇順に並べる
+    const posts = [...byNum.values()]
+      .filter(postInRange)
+      .sort((a, b) => a.num - b.num);
     return { title, posts };
   }
 

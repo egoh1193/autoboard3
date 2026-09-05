@@ -248,6 +248,15 @@ export function resolveUrl(href, baseUrl) {
   return new URL(href, baseUrl ?? MOCK_BASE).href;
 }
 
+// 日時文字列("2026-09-04 22:53" など)を epoch ms に変換する。
+// 掲示板の日時は日本時間で書かれているため、実行環境のタイムゾーンに
+// 依存しないよう UTC+9 固定で解釈する。解釈できない場合は null
+export function parsePostDateMs(dateStr) {
+  const m = /(\d{4})-(\d{2})-(\d{2})[ \t]+(\d{1,2}):(\d{2})/.exec(dateStr ?? "");
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 9 * 60 * 60 * 1000;
+}
+
 // targetUrl が設定用プレースホルダのままならモックモードとみなす
 export function isMockConfig(config) {
   return (
