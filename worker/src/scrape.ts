@@ -86,14 +86,28 @@ export interface Env {
   // 実運用設定(scraper/config.json の中身と同じ JSON 文字列)。
   // 未設定の場合は config.example.json の値でモックモードとして動作する。
   SCRAPER_CONFIG?: string;
+  // 実サイトのドメイン(.env / .dev.vars で指定)。ドメインのみならパス・クエリは
+  // config の targetUrl から補完する(バッチ側 index.mjs と同じ挙動)
+  SCRAPER_DOMAIN?: string;
 }
 
 export function loadConfig(env: Env): BoardConfig {
   const defaults = defaultConfigJson as BoardConfig;
-  if (!env.SCRAPER_CONFIG) {
-    return defaults;
+  let config = env.SCRAPER_CONFIG
+    ? { ...defaults, ...JSON.parse(env.SCRAPER_CONFIG) }
+    : defaults;
+  const domain = env.SCRAPER_DOMAIN?.trim();
+  if (domain) {
+    const envUrl = new URL(domain.includes("://") ? domain : `https://${domain}`);
+    if (envUrl.pathname === "/" && envUrl.search === "") {
+      // ドメイン(オリジン)のみ → パス・クエリは config の targetUrl から流用
+      const configUrl = new URL(config.targetUrl);
+      config = { ...config, targetUrl: envUrl.origin + configUrl.pathname + configUrl.search };
+    } else {
+      config = { ...config, targetUrl: envUrl.toString() };
+    }
   }
-  return { ...defaults, ...JSON.parse(env.SCRAPER_CONFIG) };
+  return config;
 }
 
 async function fetchHtml(url: string, config: BoardConfig): Promise<string> {

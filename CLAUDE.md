@@ -20,8 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run scrape   # バッチ用スクレイプ(site/data/ に JSON 生成)
 npm run notify   # 新着スレ検出 → Discord 投稿(DISCORD_WEBHOOK_URL 環境変数が必要)
 npm run batch    # scrape + notify
-npm run dev      # wrangler dev → http://localhost:8787(系統①の動作確認)
+npm run dev      # wrangler dev → http://localhost:8787(系統①の動作確認。.env があれば自動読み込み)
 npm run deploy   # Cloudflare Workers へデプロイ
+npm run gh-action-test  # Actions 相当のローカル実行(= batch: scrape + notify)
 MOCK=1 npm run scrape  # モックモード明示指定
 SCRAPER_DOMAIN='実サイトのドメイン' npm run scrape  # 実モードで実行(ドメインのみ可。パス・クエリは config.targetUrl から補完)
 SCRAPER_DOMAIN='実サイトのドメイン' SCRAPER_MAX_THREADS=3 npm run scrape  # 詳細取得を先頭3スレに制限(手元の動作確認用)
@@ -31,7 +32,7 @@ SCRAPER_DOMAIN='実サイトのドメイン' SCRAPER_KEYWORDS='梅田,天王寺'
 - `scrape` / `notify` / `batch` は **`.env`(ルート、gitignore)を自動読み込み**する(`--env-file-if-exists`)。テンプレートは `.env.example` — 実サイト URL・キーワード・`GIST_TOKEN`・`DISCORD_WEBHOOK_URL` 等をまとめて書ける。シェルで直接渡した環境変数が `.env` の値より優先される
 
 - テスト/リントは現状なし。JS の確認は `node --check <file>`
-- Worker のローカル実運用設定は `.dev.vars`(ルート、gitignore)に `SCRAPER_CONFIG=<config.json と同じ JSON>` を書く。未設定ならモックモード
+- Worker のローカル実運用設定は `.dev.vars`(ルート、gitignore)に `SCRAPER_CONFIG=<config.json と同じ JSON>` を書く。未設定ならモックモード。`SCRAPER_DOMAIN` にも対応(`npm run dev` は `.env` を自動読み込みするので、バッチと同じ `.env` で実モードに切り替わる)。**wrangler dev の Cache API は `.wrangler/state/` に永続化される**ため、`.env` を変えて挙動が変わらない場合は `rm -rf .wrangler/state/v3/cache` して再起動
 - バッチの実サイト URL は環境変数 `SCRAPER_DOMAIN`(config.json の targetUrl より優先)でも指定できる。CI ではリポジトリシークレット `SCRAPER_DOMAIN` を同キーで参照
 - `scraper/config.json` は gitignore され、CI ではリポジトリシークレット `SCRAPER_CONFIG` から復元される
 
