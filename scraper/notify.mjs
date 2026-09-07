@@ -28,16 +28,9 @@ const DATA_PATH = path.resolve(SCRAPER_DIR, "../site/data/threads.json");
 const DETAIL_DIR = path.resolve(SCRAPER_DIR, "../site/data/threads");
 const DEFAULT_STATE_PATH = path.resolve(SCRAPER_DIR, "../.scrape-state.json");
 
-// CI(GitHub Actions)ではログを出さない。Actions のログは public で誰でも見れるため、
-// gist URL(=秘密 gist だが URL を知れば閲覧可)などを出力しないようにする
-// (ローカルは従来どおり。通知結果は log/latest-run.md にステータスのみ記録される)
-const quiet = !!process.env.CI;
-const log = (...args) => {
-  if (!quiet) console.log(...args);
-};
-const warn = (...args) => {
-  if (!quiet) console.warn(...args);
-};
+// CI(GitHub Actions)でも処理ステップは出す。ただし gist URL は秘密 gist とはいえ
+// URL を知れば閲覧可のため、CI の public ログには出さない(ローカルでは表示)
+const showDetail = !process.env.CI;
 
 async function loadState(statePath) {
   try {
@@ -172,7 +165,7 @@ async function mergeNotifySummary(status) {
     summary.notify = { status, newThreads: notifyNewThreads };
     await writeFile(summaryPath, JSON.stringify(summary, null, 2));
   } catch (err) {
-    warn(`[notify] 警告: 実行サマリの更新に失敗しました: ${err.message}`);
+    console.warn(`[notify] 警告: 実行サマリの更新に失敗しました: ${err.message}`);
   }
 }
 
@@ -190,12 +183,12 @@ async function main() {
   const newThreads = threads.filter((t) => !knownIds.has(t.id));
   notifyNewThreads = newThreads.length;
 
-  log(
+  console.log(
     `[notify] スクレイプ結果: ${threads.length} 件 (生成 ${generatedAt}) / 既知: ${knownIds.size} 件 / 新着: ${newThreads.length} 件`,
   );
 
   if (!webhookUrl || !gistToken) {
-    warn(
+    console.warn(
       "[notify] 警告: DISCORD_WEBHOOK_URL または GIST_TOKEN が未設定のため投稿をスキップします(状態は更新しません)",
     );
     await mergeNotifySummary("skipped-unconfigured");
@@ -231,24 +224,25 @@ async function main() {
       `掲示板ミラー 新着スレッド ${newThreads.length} 件(${stamp})`,
       content,
     );
-    log(`[notify] Gist を作成しました: ${gistUrl}`);
+    // gist URL は秘密 gist とはいえ URL を知れば閲覧可のため、CI の public ログには出さない
+    console.log(`[notify] Gist を作成しました${showDetail ? `: ${gistUrl}` : ""}`);
 
     await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
-    log("[notify] Discord に gist URL を投稿しました");
+    console.log("[notify] Discord に gist URL を投稿しました");
     await mergeNotifySummary("posted");
   } else {
-    log("[notify] 新着なし。投稿をスキップします");
+    console.log("[notify] 新着なし。投稿をスキップします");
     await mergeNotifySummary("no-new");
   }
 
   // 現在の全スレ ID を次回の「既知」として保存する
   const nextKnownIds = [...new Set([...knownIds, ...threads.map((t) => t.id)])];
   await writeFile(statePath, JSON.stringify({ knownIds: nextKnownIds }, null, 2));
-  log(`[notify] 状態を保存しました (${statePath}, ${nextKnownIds.length} 件)`);
+  console.log(`[notify] 状態を保存しました (${statePath}, ${nextKnownIds.length} 件)`);
 }
 
 main().catch(async (err) => {
-  error(`[notify] 失敗: ${err.message}`);
+  console.error(`[notify] 失敗: ${err.message}`);
   try {
     await mergeNotifySummary("failed");
   } catch {
