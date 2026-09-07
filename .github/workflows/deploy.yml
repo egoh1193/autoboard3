@@ -58,6 +58,8 @@ jobs:
         run: echo "CLOUDFLARE_API_TOKEN 未登録のためデプロイをスキップしました(Cloudflare 登録後は自動デプロイ)"
 
       - name: Sync scraper config to Worker secret
+        # Cloudflare 未設定の間は wrangler が認証できず失敗するため、デプロイと同じくスキップ
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:
           SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
