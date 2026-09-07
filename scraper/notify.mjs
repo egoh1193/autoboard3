@@ -28,9 +28,8 @@ const DATA_PATH = path.resolve(SCRAPER_DIR, "../site/data/threads.json");
 const DETAIL_DIR = path.resolve(SCRAPER_DIR, "../site/data/threads");
 const DEFAULT_STATE_PATH = path.resolve(SCRAPER_DIR, "../.scrape-state.json");
 
-// CI(GitHub Actions)でも処理ステップは出す。ただし gist URL は秘密 gist とはいえ
-// URL を知れば閲覧可のため、CI の public ログには出さない(ローカルでは表示)
-const showDetail = !process.env.CI;
+// gist URL は秘密 gist とはいえ URL を知れば閲覧可のため、
+// ローカル・CI を問わずログには出さない(投稿済みの件数だけを表示する)
 
 async function loadState(statePath) {
   try {
@@ -224,8 +223,8 @@ async function main() {
       `掲示板ミラー 新着スレッド ${newThreads.length} 件(${stamp})`,
       content,
     );
-    // gist URL は秘密 gist とはいえ URL を知れば閲覧可のため、CI の public ログには出さない
-    console.log(`[notify] Gist を作成しました${showDetail ? `: ${gistUrl}` : ""}`);
+    // gist URL はログに出さない(URL を知れば閲覧可のため。ローカル・CI 共通)
+    console.log(`[notify] Gist を作成しました(新着 ${newThreads.length} スレ)`);
 
     await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
     console.log("[notify] Discord に gist URL を投稿しました");

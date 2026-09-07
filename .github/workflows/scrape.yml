@@ -70,6 +70,11 @@ jobs:
           SCRAPER_KEYWORDS: ${{ secrets.SCRAPER_KEYWORDS }}
           # 性別排除キーワード(カンマ区切り、部分一致)。該当するレスを出力から除外する
           SCRAPER_SEX_EXCLUDES: ${{ secrets.SCRAPER_SEX_EXCLUDES }}
+          # 巡回設定 gist の URL(シークレット)。SCRAPER_KEYWORDS / SCRAPER_SEX_EXCLUDES
+          # 未設定時に gist 内の JSON から読み込む。URL・ID はログには出ない
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
+          # 設定 gist が秘密 gist の場合に必要(gist 権限の PAT)
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           # 実行サマリの書き出し先(log/latest-run.md 更新の入力)
           RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run scrape

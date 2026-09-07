@@ -38,6 +38,9 @@ export function buildRunLog(s) {
   lines.push(
     `- モード: ${s.mode === "mock" ? "モック(サンプル HTML)" : "実サイト"}`,
   );
+  if (s.settingsGist) {
+    lines.push("- 巡回設定: 設定 gist から読み込み");
+  }
   if (Array.isArray(s.keywords) && s.keywords.length > 0) {
     lines.push(`- キーワード: ${s.keywords.join(" / ")}`);
   }

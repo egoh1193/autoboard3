@@ -73,6 +73,71 @@ async function writeRunSummary() {
   await writeFile(outPath, JSON.stringify(runSummary, null, 2));
 }
 
+// "a, b" / ["a"," b"] を配列に正規化する
+function splitList(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/[,,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+// 設定 gist の URL(gist.github.com/<user>/<id> など)または gist ID から ID を取り出す。
+// ID 自体も公開ログには出さないため、失敗時のメッセージに含めない
+function gistIdFromUrl(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed.includes("://")) return trimmed; // gist ID 直接指定も許容
+  try {
+    const parts = new URL(trimmed).pathname.split("/").filter(Boolean);
+    // gist.githubusercontent.com/<user>/<id>/raw/... 形式なら第2要素が ID
+    if (new URL(trimmed).hostname === "gist.githubusercontent.com") {
+      return parts[1] ?? "";
+    }
+    return parts[parts.length - 1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// 設定 gist(シークレット SCRAPER_SETTINGS_GIST_URL)から巡回設定を読み込む。
+// gist 内の最初の .json ファイルに {"keywords": [...], "sexExcludes": [...]} を書く。
+// 秘密 gist を読むため GIST_TOKEN(PAT)があれば付ける。
+// URL・ID・取得内容はログに出さない(URL を知れば閲覧可のため)
+async function loadGistSettings() {
+  const raw = process.env.SCRAPER_SETTINGS_GIST_URL;
+  if (!raw) return null;
+  const id = gistIdFromUrl(raw);
+  if (!id) {
+    throw new Error("SCRAPER_SETTINGS_GIST_URL を gist ID として解釈できませんでした");
+  }
+  const base = (process.env.GIST_API_URL || "https://api.github.com/gists").replace(/\/$/, "");
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": "board-mirror-scraper" };
+  if (process.env.GIST_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GIST_TOKEN}`;
+  }
+  const res = await fetch(`${base}/${id}`, { headers });
+  if (!res.ok) {
+    throw new Error(`設定 gist の取得に失敗しました (HTTP ${res.status})`);
+  }
+  const data = await res.json();
+  const jsonFile = Object.values(data.files ?? {}).find(
+    (f) => typeof f?.content === "string" && f?.filename?.endsWith(".json"),
+  );
+  if (!jsonFile) {
+    throw new Error("設定 gist に JSON ファイルが見つかりませんでした");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonFile.content);
+  } catch (err) {
+    throw new Error(`設定 gist の JSON を解釈できませんでした: ${err.message}`);
+  }
+  return { keywords: splitList(parsed.keywords), sexExcludes: splitList(parsed.sexExcludes) };
+}
+
 // キーワード(地名など)1 件のスレ検索 URL を組み立てる。
 // targetUrl に検索パラメータを付与する形式(例: board?id=14&keyword=梅田&is_search=スレ検索)。
 // パラメータ名・付随パラメータは config.search で上書き可能
@@ -120,22 +185,11 @@ async function loadConfig() {
       config = { ...config, targetUrl: envUrl.toString() };
     }
   }
-  // 性別排除キーワード(カンマ/読点区切り)。config.filters.sexExcludes より優先
-  const sexExcludes = (process.env.SCRAPER_SEX_EXCLUDES || "")
-    .split(/[,,]/)
-    .map((kw) => kw.trim())
-    .filter(Boolean);
-  if (sexExcludes.length > 0) {
-    config = {
-      ...config,
-      filters: { ...config.filters, sexExcludes },
-    };
-  }
   return config;
 }
 
 async function main() {
-  const config = await loadConfig();
+  let config = await loadConfig();
   const mock = process.env.MOCK === "1" || isMockConfig(config);
 
   if (mock && process.env.MOCK !== "1") {
@@ -164,6 +218,7 @@ async function main() {
     detailOk: 0,
     detailFailed: 0,
     sexExcluded: 0,
+    settingsGist: false,
     outputWritten: false,
     errors: [],
   };
@@ -187,14 +242,48 @@ async function main() {
     }
   }
 
-  // 1. 巡回対象の決定。
-  //    環境変数 SCRAPER_KEYWORDS(カンマ区切り)があれば、キーワードごとに
-  //    スレ検索 URL を組み立てて各検索結果をスレッド一覧として扱う。
-  //    なければ categoryList の取得、それもなければ targetUrl を直接スレッド一覧として扱う
-  const keywords = (process.env.SCRAPER_KEYWORDS || "")
-    .split(/[,,]/)
-    .map((kw) => kw.trim())
-    .filter(Boolean);
+  // 1. 巡回設定の取得。
+  //    設定 gist(SCRAPER_SETTINGS_GIST_URL)があれば gist 内の JSON から
+  //    キーワード・性別排除を読み込む(URL・ID はログに出さない)。
+  //    読み込みに失敗した場合は実行を中止する(意図しないフィルタで
+  //    巡回・通知されるのを避けるため)
+  let gistSettings = null;
+  try {
+    gistSettings = await loadGistSettings();
+    if (gistSettings) {
+      runSummary.settingsGist = true;
+      console.log(
+        `[scraper] 設定 gist から巡回設定を読み込みました` +
+          `(キーワード ${gistSettings.keywords.length} 件 / 性別排除 ${gistSettings.sexExcludes.length} 件)`,
+      );
+    }
+  } catch (err) {
+    runSummary.errors.push(maskUrl(err.message));
+    throw err;
+  }
+
+  // 巡回キーワード: 環境変数 > 設定 gist > なし(categoryList / targetUrl 直巡回)
+  const envKeywords = splitList(process.env.SCRAPER_KEYWORDS);
+  const keywords = envKeywords.length > 0 ? envKeywords : (gistSettings?.keywords ?? []);
+  if (gistSettings && envKeywords.length === 0 && gistSettings.keywords.length > 0) {
+    console.log(`[scraper] キーワードは設定 gist 由来`);
+  }
+
+  // 性別排除: 環境変数 > 設定 gist > config.filters.sexExcludes
+  const envSexExcludes = splitList(process.env.SCRAPER_SEX_EXCLUDES);
+  const sexExcludes =
+    envSexExcludes.length > 0
+      ? envSexExcludes
+      : gistSettings?.sexExcludes.length
+        ? gistSettings.sexExcludes
+        : (config.filters?.sexExcludes ?? []);
+  if (sexExcludes.length > 0) {
+    config = { ...config, filters: { ...config.filters, sexExcludes } };
+  }
+
+  // 巡回対象の決定: キーワードがあれば、キーワードごとに
+  // スレ検索 URL を組み立てて各検索結果をスレ一覧として扱う。
+  // なければ categoryList の取得、それもなければ targetUrl を直接スレッド一覧として扱う
   runSummary.keywords = keywords;
   let categories = [];
   if (keywords.length > 0) {
