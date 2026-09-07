@@ -18,12 +18,15 @@
 //         "posts": [                       // 投稿内容のパターン(順にローテーション)
 //           {
 //             "fields": {                  // フォームの name 属性 → 値
-//               "name": "…", "email": "…",
+//               "name": "…", "email": "…", "area": "…",
 //               "sex": "…", "age": "…", "type": "…",
-//               "free_category1": "…", "free_category2": "…",
-//               "content": "…", "edit_password": "…"
+//               "free_category2": "…", "free_category3": "…",
+//               "content": "…", "edit_password": "…",
+//               "send_deny": true          // checkbox は true/false
 //             },
 //             "sage": true                 // sage チェックボックス(任意)
+//             // ※ image_auth(画像認証)は設定不要。フォーム内の認証画像
+//             //   (image_auth_N.png)の数字を表示順に並べて自動入力する
 //           }
 //         ]
 //       }
@@ -148,6 +151,22 @@ async function fillField(scope, name, value) {
   await el.fill(text);
 }
 
+// 画像認証(image_auth)の自動入力。フォーム内の認証画像のファイル名に
+// 数字が埋め込まれている(src 例: /public/assets/img/image_auth/image_auth_5.png)
+// ので、表示順に数字を抜いて連結した文字列を入力する。
+// フォームに image_auth がなければ何もしない
+async function fillImageAuth(form) {
+  const authInput = form.locator('input[name="image_auth"]').first();
+  if ((await authInput.count()) === 0) return;
+  const srcs = await form.locator("img").evaluateAll((imgs) =>
+    imgs.map((img) => img.getAttribute("src") ?? "").filter((src) => /image_auth/i.test(src)),
+  );
+  const code = srcs
+    .map((src) => src.match(/image_auth[^0-9]*(\d+)/)?.[1] ?? "")
+    .join("");
+  if (code) await authInput.fill(code);
+}
+
 // 投稿系統 1 件の処理。間隔未経過なら何もせず戻る
 async function processConfig(config, index, state, origin, context, summary) {
   const key = config.name ?? `#${index}`;
@@ -197,6 +216,8 @@ async function processConfig(config, index, state, origin, context, summary) {
       for (const [name, value] of Object.entries(fields)) {
         await fillField(form, name, value);
       }
+      // 画像認証は設定に関係なく毎回自動入力する(ページごとに数字が変わるため)
+      await fillImageAuth(form);
       if (pattern.sage) {
         await form.locator('[name="sage"]').first().check().catch(() => {});
       }

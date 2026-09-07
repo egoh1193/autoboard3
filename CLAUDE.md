@@ -94,7 +94,7 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 
 - 設定 gist の JSON 内の **`post` ブロック**に従い、**Playwright(Chromium ヘッドレス)**で投稿フォーム(`form[name=form01]`)を自動操作して投稿する。対象掲示板は自営・投稿許可済み。**`post` は 1 系統(オブジェクト)でも複数系統(配列)でも書け**、各系統が投稿先・間隔・内容を独立に持つ(系統名 `name` は状態のキー)
 - gist の `post` 各系統: `enabled` / `threadIds`(投稿先スレ ID 配列)/ `formPath`(フォームページのパス。`{id}` をスレ ID で置換)/ `intervalMinutes`(投稿間隔。前回試行から未経過なら何もしない)/ `posts[]`(投稿パターン。`fields` はフォームの name 属性 → 値、`sage` はチェックボックス。**順にローテーション**して同じ文面の連投を避ける)
-- フォームの値は gist 側の `fields`(name 属性 → 値)で完全指定。select は値(失敗時ラベル)選択、checkbox は truthy でチェック、text/textarea は fill
+- フォームの値は gist 側の `fields`(name 属性 → 値)で完全指定。select は値(失敗時ラベル)選択、checkbox は truthy でチェック、text/textarea は fill。**画像認証 `image_auth` は設定不要** — フォーム内の認証画像 `image_auth_N.png` のファイル名から数字を表示順に抜いて自動入力する(`fillImageAuth()`)。画像アップロード(`file[1]`/`file[2]`)は未対応
 - 状態 `.post-state.json`(actions/cache)に `lastPostedAt` / `rotateIndex` を保存。**成否問わず試行ごとに `lastPostedAt` を進める**(失敗しても間隔内に再試行して連打しない)
 - **投稿内容(名前・メール・本文・編集キー)はログに絶対に出さない**(件数のみ)。エラー内の URL も `maskUrl()` でマスク。CI ログ・`log/latest-run.md` と同じ規約
 - Actions では `npx playwright install chromium` を実行(~150MB。actions/cache でキャッシュ)。Worker 内では Playwright は動かない(Cloudflare Browser Rendering なら可だが有料)ため、**系統③はバッチ側のみ**
