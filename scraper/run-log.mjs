@@ -24,6 +24,15 @@ const NOTIFY_LABELS = {
   failed: "失敗",
 };
 
+// 自動投稿(系統③)の結果表示(件数のみ・内容は載せない)
+const POST_LABELS = {
+  posted: "実行あり",
+  partial: "実行あり(一部失敗)",
+  failed: "失敗",
+  "not-due": "間隔未経過",
+  "skipped-unconfigured": "設定なし",
+};
+
 // サマリ 1 件から Markdown を組み立てる
 export function buildRunLog(s) {
   const lines = [];
@@ -66,6 +75,14 @@ export function buildRunLog(s) {
     lines.push(`- 通知: ${NOTIFY_LABELS[notify.status] ?? notify.status}${newThreads}`);
   } else {
     lines.push("- 通知: 情報なし");
+  }
+  const post = s.post;
+  if (post) {
+    const counts =
+      post.posted != null || post.failed != null
+        ? `(${post.posted ?? 0} 成功 / ${post.failed ?? 0} 失敗)`
+        : "";
+    lines.push(`- 自動投稿: ${POST_LABELS[post.status] ?? post.status}${counts}`);
   }
   lines.push(`- 出力: ${s.outputWritten ? "site/data/ への書き出し完了" : "書き出し未完了"}`);
   lines.push("");
