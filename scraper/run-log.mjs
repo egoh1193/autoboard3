@@ -54,6 +54,9 @@ export function buildRunLog(s) {
   if (s.keywords > 0) {
     lines.push(`- キーワード: ${s.keywords} 件`);
   }
+  if (s.directThreads > 0) {
+    lines.push(`- 直接指定スレ: ${s.directThreads} 件を巡回対象に追加`);
+  }
   lines.push(
     `- スレ一覧: ${s.listedThreads ?? 0} 件 → フィルタ後 ${s.filteredThreads ?? 0} 件` +
       (s.detailLimit ? `(詳細取得は先頭 ${s.detailLimit} 件に制限)` : ""),

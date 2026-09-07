@@ -141,6 +141,8 @@ async function loadGistSettings() {
     keywords: splitList(parsed.keywords),
     sexExcludes: splitList(parsed.sexExcludes),
     blackList: splitList(parsed.blackList),
+    // 直接指定スレ(directThreads)。文字列 or {url, title, newestFirst} の配列
+    directThreads: Array.isArray(parsed.directThreads) ? parsed.directThreads : null,
   };
 }
 
@@ -375,15 +377,19 @@ async function main() {
       (threads.length !== allThreads.length ? `(除外 ${allThreads.length - threads.length} 件)` : ""),
   );
 
-  // 3.5 直接指定スレッド(config.directThreads)。
+  // 3.5 直接指定スレッド(directThreads)。
   // 「メインスレ」など一覧を経由せず毎回巡回したいスレを URL で直接指定する。
   // 要素は URL 文字列 or {url, title, newestFirst}:
   //   - newestFirst: true のスレは降順ページング(p=1 が最新)として取得する
+  // 優先順: 設定 gist(gist の JSON に directThreads があればそちら) > config
   // 明示指定のためタイトルフィルタ(matchesFilters)は適用しない。
   // 一覧由来のスレと ID が重複した場合は一覧側を優先してスキップ
+  const directThreadSpecs = gistSettings?.directThreads?.length
+    ? gistSettings.directThreads
+    : (config.directThreads ?? []);
   let directCount = 0;
   const seenDirect = new Set(threads.map((t) => t.id));
-  for (const entry of config.directThreads ?? []) {
+  for (const entry of directThreadSpecs) {
     const spec = typeof entry === "string" ? { url: entry } : (entry ?? {});
     const url = String(spec.url ?? "").trim();
     if (!url) continue;
