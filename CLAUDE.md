@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 掲示板をスクレイピングして再利用するプロジェクト。対象は自営・取得許可済みの掲示板。UI とログは日本語。**2系統の仕組みで動く:**
 
 - **系統①(サイト)**: 閲覧者がアクセスした時点で Cloudflare Worker が対象掲示板をリアルタイム取得し、`/data/*.json` を動的生成して静的フロントに表示
-- **系統②(定期バッチ)**: GitHub Actions が毎時スクレイピングし、新着スレッドの詳細を GitHub Gist に投稿、その URL を Discord webhook に通知
+- **系統②(定期バッチ)**: GitHub Actions が 5 分おきにスクレイピングし、新着スレッドの新着レスを投稿者ごとにまとめて GitHub Gist に投稿、その URL を Discord webhook に通知
 
 ```
 系統①:  閲覧者 → Worker(worker/src/) → 対象掲示板
@@ -86,9 +86,9 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 - `index.mjs`: 全取得は順次・`request.intervalMs`(既定 1500ms)以上の間隔 + リトライ。個別スレの失敗はスキップして継続、一覧取得失敗やフィルタ 0 件は exit 1(Actions を失敗させる)。個別ページ(メール送信ページ)からのメールアドレス抽出もここでのみ行う(重複 URL は実行内キャッシュで 1 回だけ取得)
 - **CI のログは処理ステップのみ・機微情報は出さない**: index.mjs / notify.mjs は環境変数 `CI`(GitHub Actions が自動設定)があれば処理ステップ(キーワード・件数・`(n/N)` 進行)は出すが、**実サイトのドメイン・URL・スレタイ・投稿内容・gist URL は出さない**(Actions のログは public のため。エラー内の URL も `maskUrl()` で `***` にマスク)。ローカル(CI 変数なし)はスレタイ・URL も表示するが **gist URL はローカルでもログに出さない**。エラー・統計は `log/latest-run.md` にマスク済みで記録される
 - **巡回設定 gist**(`SCRAPER_SETTINGS_GIST_URL`, シークレット): gist 内の最初の `.json` ファイルに `{"keywords": [...], "sexExcludes": [...], "blackList": [...]}` を書いておくと、`SCRAPER_KEYWORDS` / `SCRAPER_SEX_EXCLUDES` / `SCRAPER_BLACKLIST` 未設定時に読み込む(優先順: 環境変数 > gist > config)。`blackList` はメールアドレス完全一致(大文字小文字・空白は無視)で該当レスを除外 — **メールアドレスは個別メールページ取得後に確定するためバッチ専用**(Worker はメールページを取得しない)。秘密 gist を読むため `GIST_TOKEN` が必要。**gist URL・ID・内容はログに出さない**。読み込み失敗時は実行を中止する(意図しないフィルタでの巡回・通知を避ける)。バッチ側のみ(Worker は未対応)
-- `notify.mjs`: 前回実行の状態(`.scrape-state.json`)と差分し、新着スレの詳細(レス全文・付帯情報・メールアドレス)を**秘密 gist** に Markdown で投稿し、その URL だけを Discord に投稿する(本文を Discord に直接は送らない)。**gist の Markdown 形式は仮実装で要調整**(`buildGistContent()` / `buildDiscordMessage()`)。`DISCORD_WEBHOOK_URL` or `GIST_TOKEN` 未設定なら状態を更新しない(設定後に通知される設計)。状態ファイルは actions/cache で次回実行へ引き継ぐ。`GIST_TOKEN` は gist 権限を持つ PAT(Actions 既定の GITHUB_TOKEN では gist 作成不可)
+- `notify.mjs`: 前回実行の状態(`.scrape-state.json`)と差分し、新着スレの新着レス(レス全文・付帯情報・メールアドレス)を**投稿者ごと**にまとめた Markdown を**秘密 gist** に投稿し、その URL だけを Discord に投稿する(本文を Discord に直接は送らない)。各レスの見出しに元投稿スレ(タイトル・URL)を付与(`buildGistContent()`)。`DISCORD_WEBHOOK_URL` or `GIST_TOKEN` 未設定なら状態を更新しない(設定後に通知される設計)。状態ファイルは actions/cache で次回実行へ引き継ぐ。`GIST_TOKEN` は gist 権限を持つ PAT(Actions 既定の GITHUB_TOKEN では gist 作成不可)
 - **最新実行ログ**(`log/latest-run.md`): 各実行の統計を public リポジトリに残す仕組み。index.mjs / notify.mjs が実行統計(キーワード・件数・エラー等)を `RUN_SUMMARY_JSON`(/tmp 配下)に JSON 書き出しし、最後のステップ(`if: always()`)で `scraper/run-log.mjs` が `log/latest-run.md` に整形・コミット・push する(push 失敗は警告のみで次回再試行)。**ドメイン・URL・スレタイ・投稿内容・gist URL は含めない**(エラーメッセージ内のドメインは `***` にマスク)。ローカルでは `RUN_SUMMARY_JSON=/tmp/run-summary.json npm run batch` でサマリ生成 → `node scraper/run-log.mjs` で整形を確認できる
-- `scrape.yml`(毎時 cron)は**デプロイしない**。デプロイは `deploy.yml`(コード変更時)のみ
+- `scrape.yml`(5 分おき cron)は**デプロイしない**。デプロイは `deploy.yml`(コード変更時)のみ
 
 ### site/(ビルド不要の静的フロント)
 

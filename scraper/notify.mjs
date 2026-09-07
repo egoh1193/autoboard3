@@ -1,8 +1,10 @@
 // 系統②:通知(scraper/notify.mjs)
 //
 // 直前のスクレイプ結果(site/data/threads.json)と状態ファイル(.scrape-state.json)
-// を比較し、前回以降に新しく見つかったスレッドの詳細を GitHub Gist に投稿して、
-// その URL を Discord webhook に投稿する(本文そのものは Discord に送らない)。
+// を比較し、前回以降に新しく見つかったスレッドの新着レスを「投稿者ごと」に
+// まとめて GitHub Gist に投稿し、その URL を Discord webhook に投稿する
+// (本文そのものは Discord に送らない)。各レスの見出しには元投稿スレ
+// (タイトル・URL)を付ける。
 // 状態ファイルは GitHub Actions の actions/cache で次回実行へ引き継ぐ。
 //
 // 環境変数:
@@ -75,39 +77,66 @@ function formatPost(post) {
   return lines.join("\n");
 }
 
-// 新着スレ一覧を Gist に投稿する Markdown に組み立てる
+// 新着スレのレスを「投稿者ごと」にグループ化する。
+// 戻り値: Map(投稿者名 → Map(スレッドID → { thread, posts }))
+// 投稿者名が空のレスは「(名前なし)」にまとめる。同一投稿者のレスは
+// 元投稿スレ(タイトル・URL)を付けてスレ単位で束ねて出力する
+function groupPostsByAuthor(newThreads, details) {
+  const byAuthor = new Map();
+  for (const thread of newThreads) {
+    const detail = details[thread.id];
+    if (!detail) continue; // 本文取得失敗スレは投稿者一覧に出せないためスキップ
+    for (const post of detail.posts) {
+      const name = (post.name ?? "").trim() || "(名前なし)";
+      if (!byAuthor.has(name)) byAuthor.set(name, new Map());
+      const threadsMap = byAuthor.get(name);
+      if (!threadsMap.has(thread.id)) threadsMap.set(thread.id, { thread, posts: [] });
+      threadsMap.get(thread.id).posts.push(post);
+    }
+  }
+  return byAuthor;
+}
+
+// 新着投稿一覧を「投稿者ごと」に組み立てて Gist に投稿する Markdown を作る。
+// 各レスの見出しに元投稿スレ(タイトル・URL)を付与する
 function buildGistContent({ newThreads, details, generatedAt, isFirstRun, totalThreads }) {
+  const byAuthor = groupPostsByAuthor(newThreads, details);
+  const postCount = [...byAuthor.values()].reduce(
+    (n, threadsMap) => n + [...threadsMap.values()].reduce((x, g) => x + g.posts.length, 0),
+    0,
+  );
   const lines = [];
   lines.push(
     isFirstRun
       ? `# 初回実行: 現在の対象スレ ${newThreads.length} 件(次回からは新着のみ)`
-      : `# 新着スレッド ${newThreads.length} 件`,
+      : `# 新着投稿 ${postCount} 件(投稿者 ${byAuthor.size} 名 / 新着スレ ${newThreads.length} 件)`,
   );
   lines.push("");
   lines.push(`- スクレイプ生成日時: ${generatedAt}`);
   lines.push(`- 対象スレ合計: ${totalThreads} 件`);
+  // 本文未取得スレは投稿者一覧に出せないため、存在だけ明記する
+  const noDetail = newThreads.filter((t) => !details[t.id]);
+  if (noDetail.length > 0) {
+    lines.push(`- 本文未取得スレ: ${noDetail.length} 件(以下の投稿者一覧には含まれない)`);
+  }
   lines.push("");
 
-  for (const thread of newThreads) {
-    const detail = details[thread.id];
+  for (const [name, threadsMap] of byAuthor) {
+    const authorPostCount = [...threadsMap.values()].reduce((x, g) => x + g.posts.length, 0);
     lines.push("---");
     lines.push("");
-    lines.push(`## ${thread.title || "(タイトルなし)"}`);
+    lines.push(`## ${name}(${authorPostCount} レス)`);
     lines.push("");
-    lines.push(`- URL: ${thread.url}`);
-    lines.push(`- スレッド ID: ${thread.id}`);
-    if (thread.category) lines.push(`- カテゴリ: ${thread.category}`);
-    lines.push(`- レス数: ${detail ? detail.posts.length : thread.resCount}`);
-    lines.push("");
-    if (!detail) {
-      lines.push("(本文の取得に失敗していたため、詳細はありません)");
+    for (const { thread, posts } of threadsMap.values()) {
+      // 元投稿スレの情報(投稿がどこから来たか)
+      lines.push(`### 元スレ: ${thread.title || "(タイトルなし)"}`);
       lines.push("");
-      continue;
-    }
-    lines.push("### レス");
-    lines.push("");
-    for (const post of detail.posts) {
-      lines.push(formatPost(post));
+      lines.push(`- URL: ${thread.url}`);
+      if (thread.category) lines.push(`- カテゴリ: ${thread.category}`);
+      lines.push("");
+      for (const post of posts) {
+        lines.push(formatPost(post));
+      }
     }
   }
   return lines.join("\n");
@@ -219,8 +248,8 @@ async function main() {
     const gistUrl = await createGist(
       gistToken,
       gistApiUrl,
-      `new-threads-${stamp}.md`,
-      `掲示板ミラー 新着スレッド ${newThreads.length} 件(${stamp})`,
+      `new-posts-${stamp}.md`,
+      `掲示板ミラー 新着投稿(スレ ${newThreads.length} 件 / ${stamp})`,
       content,
     );
     // gist URL はログに出さない(URL を知れば閲覧可のため。ローカル・CI 共通)
