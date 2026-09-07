@@ -17,6 +17,15 @@ import { fileURLToPath } from "node:url";
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = path.resolve(SCRAPER_DIR, "../log/latest-run.md");
 
+// CI(GitHub Actions)ではログを出さない(index.mjs / notify.mjs と同じ方針)
+const quiet = !!process.env.CI;
+const log = (...args) => {
+  if (!quiet) console.log(...args);
+};
+const error = (...args) => {
+  if (!quiet) console.error(...args);
+};
+
 const NOTIFY_LABELS = {
   posted: "投稿あり",
   "no-new": "新着なし",
@@ -87,13 +96,13 @@ async function main() {
     throw new Error(`実行サマリ ${summaryPath} を読めませんでした: ${err.message}`);
   }
   await writeFile(outputPath, buildRunLog(summary));
-  console.log(`[run-log] ${outputPath} を更新しました`);
+  log(`[run-log] ${outputPath} を更新しました`);
 }
 
 // CLI 実行時のみ main を走らせる(import されても何もしない)
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
-    console.error(`[run-log] 失敗: ${err.message}`);
+    error(`[run-log] 失敗: ${err.message}`);
     process.exit(1);
   });
 }

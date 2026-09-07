@@ -84,6 +84,7 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 ### 系統② バッチ(index.mjs + notify.mjs)
 
 - `index.mjs`: 全取得は順次・`request.intervalMs`(既定 1500ms)以上の間隔 + リトライ。個別スレの失敗はスキップして継続、一覧取得失敗やフィルタ 0 件は exit 1(Actions を失敗させる)。個別ページ(メール送信ページ)からのメールアドレス抽出もここでのみ行う(重複 URL は実行内キャッシュで 1 回だけ取得)
+- **CI ではコンソールログを出さない**: index.mjs / notify.mjs / run-log.mjs は環境変数 `CI`(GitHub Actions が自動設定)があれば全ログを沈黙させる。Actions のログは public で誰でも見れるため、実サイトのドメイン・URL・スレタイ・gist URL を出力しないようにするため(ローカルは従来どおり表示)。エラー内容は `log/latest-run.md` にマスク済みで記録される
 - `notify.mjs`: 前回実行の状態(`.scrape-state.json`)と差分し、新着スレの詳細(レス全文・付帯情報・メールアドレス)を**秘密 gist** に Markdown で投稿し、その URL だけを Discord に投稿する(本文を Discord に直接は送らない)。**gist の Markdown 形式は仮実装で要調整**(`buildGistContent()` / `buildDiscordMessage()`)。`DISCORD_WEBHOOK_URL` or `GIST_TOKEN` 未設定なら状態を更新しない(設定後に通知される設計)。状態ファイルは actions/cache で次回実行へ引き継ぐ。`GIST_TOKEN` は gist 権限を持つ PAT(Actions 既定の GITHUB_TOKEN では gist 作成不可)
 - **最新実行ログ**(`log/latest-run.md`): 各実行の統計を public リポジトリに残す仕組み。index.mjs / notify.mjs が実行統計(キーワード・件数・エラー等)を `RUN_SUMMARY_JSON`(/tmp 配下)に JSON 書き出しし、最後のステップ(`if: always()`)で `scraper/run-log.mjs` が `log/latest-run.md` に整形・コミット・push する(push 失敗は警告のみで次回再試行)。**ドメイン・URL・スレタイ・投稿内容・gist URL は含めない**(エラーメッセージ内のドメインは `***` にマスク)。ローカルでは `RUN_SUMMARY_JSON=/tmp/run-summary.json npm run batch` でサマリ生成 → `node scraper/run-log.mjs` で整形を確認できる
 - `scrape.yml`(毎時 cron)は**デプロイしない**。デプロイは `deploy.yml`(コード変更時)のみ

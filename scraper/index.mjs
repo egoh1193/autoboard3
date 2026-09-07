@@ -49,6 +49,20 @@ let summaryTargetUrl = "";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// CI(GitHub Actions)ではログを出さない。Actions のログは public で誰でも見れるため、
+// 実サイトのドメイン・URL・スレタイ・gist URL を出力しないようにする
+// (ローカルは従来どおり。エラー内容は log/latest-run.md にマスク済みで記録される)
+const quiet = !!process.env.CI;
+const log = (...args) => {
+  if (!quiet) console.log(...args);
+};
+const warn = (...args) => {
+  if (!quiet) console.warn(...args);
+};
+const error = (...args) => {
+  if (!quiet) console.error(...args);
+};
+
 function maskUrl(msg) {
   let out = msg.split(summaryTargetUrl).join("***");
   try {
@@ -133,11 +147,11 @@ async function main() {
   const mock = process.env.MOCK === "1" || isMockConfig(config);
 
   if (mock && process.env.MOCK !== "1") {
-    console.log(
+    log(
       "[scraper] 参考: SCRAPER_DOMAIN 環境変数または config.json の targetUrl で実サイトを取得できます",
     );
   }
-  console.log(`[scraper] ${mock ? "モックモード" : `対象: ${config.targetUrl}`} で実行します`);
+  log(`[scraper] ${mock ? "モックモード" : `対象: ${config.targetUrl}`} で実行します`);
 
   const intervalMs = config.request?.intervalMs ?? 1500;
   const generatedAt = new Date().toISOString();
@@ -190,16 +204,16 @@ async function main() {
   let categories = [];
   if (keywords.length > 0) {
     categories = keywords.map((kw) => ({ name: kw, url: buildSearchUrl(config, kw) }));
-    console.log(`[scraper] キーワード検索: ${keywords.join(" / ")}`);
+    log(`[scraper] キーワード検索: ${keywords.join(" / ")}`);
     for (const category of categories) {
-      console.log(`[scraper]   ${category.name} → ${category.url}`);
+      log(`[scraper]   ${category.name} → ${category.url}`);
     }
   } else if (config.categoryList?.selector) {
     const listHtml = await getHtml(config.targetUrl, "sample.html");
     categories = parseList(listHtml, config.categoryList)
       .map((row) => ({ name: row.name || "", url: resolveUrl(row.url, config.targetUrl) }))
       .filter((c) => c.name || c.url);
-    console.log(`[scraper] カテゴリ: ${categories.length} 件`);
+    log(`[scraper] カテゴリ: ${categories.length} 件`);
   }
   if (categories.length === 0) {
     categories = [{ name: "", url: config.targetUrl }];
@@ -218,7 +232,7 @@ async function main() {
         html = await getHtml(pageUrl, "sample-thread-list.html");
       } catch (err) {
         const msg = `${pageUrl} の取得に失敗しました: ${err.message}`;
-        console.warn(`[scraper] 警告: ${msg}`);
+        warn(`[scraper] 警告: ${msg}`);
         runSummary.errors.push(maskUrl(msg));
         break;
       }
@@ -244,13 +258,13 @@ async function main() {
       pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : "";
     }
   }
-  console.log(`[scraper] スレッド合計: ${allThreads.length} 件`);
+  log(`[scraper] スレッド合計: ${allThreads.length} 件`);
   runSummary.listedThreads = allThreads.length;
 
   // 3. タイトルによる絞り込み
   const threads = allThreads.filter((t) => matchesFilters(t.title, config.filters));
   runSummary.filteredThreads = threads.length;
-  console.log(
+  log(
     `[scraper] フィルタ後: ${threads.length} 件` +
       (threads.length !== allThreads.length ? `(除外 ${allThreads.length - threads.length} 件)` : ""),
   );
@@ -260,7 +274,7 @@ async function main() {
   const maxDetailThreads = Number(process.env.SCRAPER_MAX_THREADS) || 0;
   runSummary.detailLimit = maxDetailThreads || null;
   if (maxDetailThreads > 0 && threads.length > maxDetailThreads) {
-    console.log(
+    log(
       `[scraper] SCRAPER_MAX_THREADS=${maxDetailThreads} のため、詳細取得は先頭 ${maxDetailThreads} 件に制限します`,
     );
   }
@@ -286,7 +300,7 @@ async function main() {
       : config.thread?.maxAgeDays ?? 2;
   const cutoffTs = maxAgeDays > 0 ? Date.now() - maxAgeDays * 86400_000 : null;
   if (cutoffTs !== null) {
-    console.log(
+    log(
       `[scraper] スレ内の取得範囲: 直近 ${maxAgeDays} 日(それより古いページは遡りません)`,
     );
   }
@@ -364,12 +378,12 @@ async function main() {
   const detailTargets = maxDetailThreads > 0 ? threads.slice(0, maxDetailThreads) : threads;
   runSummary.detailThreads = detailTargets.length;
   for (const [i, thread] of detailTargets.entries()) {
-    console.log(`[scraper] (${i + 1}/${threads.length}) ${thread.title || thread.url}`);
+    log(`[scraper] (${i + 1}/${threads.length}) ${thread.title || thread.url}`);
     try {
       const { title, posts, excluded } = await fetchThreadDetail(thread);
       runSummary.sexExcluded += excluded;
       if (excluded > 0) {
-        console.log(`[scraper]   性別排除: ${excluded} 件を除外`);
+        log(`[scraper]   性別排除: ${excluded} 件を除外`);
       }
       runSummary.detailOk++;
       thread.detail = { title, posts };
@@ -393,7 +407,7 @@ async function main() {
               // 個別ページの失敗も続行(そのレスの email は空欄)
               mailEmailCache.set(mailPageUrl, "");
               const msg = `${mailPageUrl} の取得に失敗しました: ${err.message}`;
-              console.warn(`[scraper] 警告: ${msg}`);
+              warn(`[scraper] 警告: ${msg}`);
               runSummary.errors.push(maskUrl(msg));
             }
           }
@@ -404,7 +418,7 @@ async function main() {
       // 個別スレッドの失敗は全体を中断しない(一覧には resCount 掲載のまま表示)
       runSummary.detailFailed++;
       const msg = `${thread.url} の取得に失敗しました: ${err.message}`;
-      console.warn(`[scraper] 警告: ${msg}`);
+      warn(`[scraper] 警告: ${msg}`);
       runSummary.errors.push(maskUrl(msg));
     }
   }
@@ -430,7 +444,7 @@ async function main() {
   }
 
   const okCount = threads.filter((t) => t.detail).length;
-  console.log(`[scraper] 完了: ${threads.length} 件中 ${okCount} 件の詳細を site/data/ に出力しました`);
+  log(`[scraper] 完了: ${threads.length} 件中 ${okCount} 件の詳細を site/data/ に出力しました`);
   runSummary.outputWritten = true;
   await writeRunSummary();
 }
@@ -445,7 +459,7 @@ async function fetchPage(url, config) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
       const backoff = (request?.retryBackoffMs ?? 2000) * 2 ** (attempt - 1);
-      console.warn(`  リトライ ${attempt}/${retries} (${backoff}ms 待機) …`);
+      warn(`  リトライ ${attempt}/${retries} (${backoff}ms 待機) …`);
       await sleep(backoff);
     }
     try {
@@ -465,7 +479,7 @@ async function fetchPage(url, config) {
 }
 
 main().catch(async (err) => {
-  console.error(`[scraper] 失敗: ${err.message}`);
+  error(`[scraper] 失敗: ${err.message}`);
   // 失敗時もサマリは書き出す(Actions の log/latest-run.md 更新に使う)
   if (runSummary) {
     runSummary.errors.push(maskUrl(err.message));
