@@ -216,7 +216,7 @@ async function main() {
     startedAt: generatedAt,
     finishedAt: null,
     mode: mock ? "mock" : "real",
-    keywords: [],
+    keywords: 0,
     listedThreads: 0,
     filteredThreads: 0,
     detailLimit: null,
@@ -305,14 +305,14 @@ async function main() {
   // 巡回対象の決定: キーワードがあれば、キーワードごとに
   // スレ検索 URL を組み立てて各検索結果をスレ一覧として扱う。
   // なければ categoryList の取得、それもなければ targetUrl を直接スレッド一覧として扱う
-  runSummary.keywords = keywords;
+  // キーワードの値(地名など)は実行ログ・実行サマリに出さない(件数のみ)
+  runSummary.keywords = keywords.length;
   let categories = [];
   if (keywords.length > 0) {
     categories = keywords.map((kw) => ({ name: kw, url: buildSearchUrl(config, kw) }));
-    console.log(`[scraper] キーワード検索: ${keywords.join(" / ")}`);
-    for (const category of categories) {
-      // 検索 URL は実サイトドメインを含むため CI の public ログには出さない
-      console.log(`[scraper]   ${category.name}${showDetail ? ` → ${category.url}` : ""}`);
+    console.log(`[scraper] キーワード検索: ${keywords.length} 件`);
+    for (const [i, category] of categories.entries()) {
+      console.log(`[scraper]   (${i + 1}/${keywords.length}) 検索中`);
     }
   } else if (config.categoryList?.selector) {
     const listHtml = await getHtml(config.targetUrl, "sample.html");

@@ -41,8 +41,9 @@ export function buildRunLog(s) {
   if (s.settingsGist) {
     lines.push("- 巡回設定: 設定 gist から読み込み");
   }
-  if (Array.isArray(s.keywords) && s.keywords.length > 0) {
-    lines.push(`- キーワード: ${s.keywords.join(" / ")}`);
+  // キーワードの値(地名など)は public リポジトリのログに載せない(件数のみ)
+  if (s.keywords > 0) {
+    lines.push(`- キーワード: ${s.keywords} 件`);
   }
   lines.push(
     `- スレ一覧: ${s.listedThreads ?? 0} 件 → フィルタ後 ${s.filteredThreads ?? 0} 件` +
