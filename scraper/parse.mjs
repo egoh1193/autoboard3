@@ -229,6 +229,20 @@ export function isSexExcluded(post, filters) {
   return excludes.some((kw) => post.sex.includes(kw));
 }
 
+// レスのメールアドレス(post.email)がブラックリスト(filters.blackList)に
+// 該当するか。大文字小文字・前後の空白を無視した完全一致。post.email が
+// 空なら常に false(メールを持たないレスは対象外)
+// 注意: post.email は個別メールページの取得後に確定するため、
+// バッチ(index.mjs)でしか判定できない(Worker はメールページを取らない)
+export function isBlacklisted(post, filters) {
+  const blackList = filters?.blackList ?? [];
+  const email = (post?.email ?? "").trim().toLowerCase();
+  if (!email) {
+    return false;
+  }
+  return blackList.some((entry) => (entry ?? "").trim().toLowerCase() === email);
+}
+
 // URL からスレッドのファイル名に使う ID を作る。
 // クエリに id 系パラメータがあればそれを利用し、なければ末尾パスセグメント
 // (拡張子除去)を使う。どちらも取れない場合は URL 全体の短いハッシュを用いる。

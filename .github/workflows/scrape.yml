@@ -72,6 +72,9 @@ jobs:
           SCRAPER_KEYWORDS: ${{ secrets.SCRAPER_KEYWORDS }}
           # 性別排除キーワード(カンマ区切り、部分一致)。該当するレスを出力から除外する
           SCRAPER_SEX_EXCLUDES: ${{ secrets.SCRAPER_SEX_EXCLUDES }}
+          # ブラックリスト(カンマ区切り、メールアドレス完全一致)。
+          # 該当するメールアドレスのレスを出力から除外する
+          SCRAPER_BLACKLIST: ${{ secrets.SCRAPER_BLACKLIST }}
           # 巡回設定 gist の URL(シークレット)。SCRAPER_KEYWORDS / SCRAPER_SEX_EXCLUDES
           # 未設定時に gist 内の JSON から読み込む。URL・ID はログには出ない
           SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}

@@ -26,6 +26,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   isMockConfig,
+  isBlacklisted,
   isSexExcluded,
   matchesFilters,
   parseList,
@@ -103,7 +104,8 @@ function gistIdFromUrl(raw) {
 }
 
 // 設定 gist(シークレット SCRAPER_SETTINGS_GIST_URL)から巡回設定を読み込む。
-// gist 内の最初の .json ファイルに {"keywords": [...], "sexExcludes": [...]} を書く。
+// gist 内の最初の .json ファイルに {"keywords": [...], "sexExcludes": [...],
+// "blackList": [...]} を書く。
 // 秘密 gist を読むため GIST_TOKEN(PAT)があれば付ける。
 // URL・ID・取得内容はログに出さない(URL を知れば閲覧可のため)
 async function loadGistSettings() {
@@ -135,7 +137,11 @@ async function loadGistSettings() {
   } catch (err) {
     throw new Error(`設定 gist の JSON を解釈できませんでした: ${err.message}`);
   }
-  return { keywords: splitList(parsed.keywords), sexExcludes: splitList(parsed.sexExcludes) };
+  return {
+    keywords: splitList(parsed.keywords),
+    sexExcludes: splitList(parsed.sexExcludes),
+    blackList: splitList(parsed.blackList),
+  };
 }
 
 // キーワード(地名など)1 件のスレ検索 URL を組み立てる。
@@ -218,6 +224,7 @@ async function main() {
     detailOk: 0,
     detailFailed: 0,
     sexExcluded: 0,
+    blackListed: 0,
     settingsGist: false,
     outputWritten: false,
     errors: [],
@@ -254,7 +261,8 @@ async function main() {
       runSummary.settingsGist = true;
       console.log(
         `[scraper] 設定 gist から巡回設定を読み込みました` +
-          `(キーワード ${gistSettings.keywords.length} 件 / 性別排除 ${gistSettings.sexExcludes.length} 件)`,
+          `(キーワード ${gistSettings.keywords.length} 件 / 性別排除 ${gistSettings.sexExcludes.length} 件` +
+          ` / ブラックリスト ${gistSettings.blackList.length} 件)`,
       );
     }
   } catch (err) {
@@ -279,6 +287,19 @@ async function main() {
         : (config.filters?.sexExcludes ?? []);
   if (sexExcludes.length > 0) {
     config = { ...config, filters: { ...config.filters, sexExcludes } };
+  }
+
+  // ブラックリスト(メールアドレス完全一致): 環境変数 > 設定 gist > config.filters.blackList
+  // 判定は parse.mjs の isBlacklisted(バッチのみ。Worker はメールページを取得しないため未対応)
+  const envBlackList = splitList(process.env.SCRAPER_BLACKLIST);
+  const blackList =
+    envBlackList.length > 0
+      ? envBlackList
+      : gistSettings?.blackList.length
+        ? gistSettings.blackList
+        : (config.filters?.blackList ?? []);
+  if (blackList.length > 0) {
+    config = { ...config, filters: { ...config.filters, blackList } };
   }
 
   // 巡回対象の決定: キーワードがあれば、キーワードごとに
@@ -475,12 +496,6 @@ async function main() {
         console.log(`[scraper]   性別排除: ${excluded} 件を除外`);
       }
       runSummary.detailOk++;
-      thread.detail = { title, posts };
-      // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
-      if (title && !mock) {
-        thread.title = title;
-      }
-      thread.resCount = posts.length;
 
       // 4.5 名前欄リンクの個別ページからメールアドレスを抽出
       if (mailLinkRe && emailRe) {
@@ -503,6 +518,26 @@ async function main() {
           post.email = mailEmailCache.get(mailPageUrl) ?? "";
         }
       }
+
+      // 4.6 ブラックリスト(メールアドレス完全一致)に該当するレスを出力から除外
+      // (メールアドレスは 4.5 で確定した後で判定する)
+      let detailPosts = posts;
+      if ((config.filters?.blackList ?? []).length > 0) {
+        const before = detailPosts.length;
+        detailPosts = detailPosts.filter((post) => !isBlacklisted(post, config.filters));
+        const blacklisted = before - detailPosts.length;
+        if (blacklisted > 0) {
+          console.log(`[scraper]   ブラックリスト: ${blacklisted} 件を除外`);
+          runSummary.blackListed += blacklisted;
+        }
+      }
+
+      thread.detail = { title, posts: detailPosts };
+      // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
+      if (title && !mock) {
+        thread.title = title;
+      }
+      thread.resCount = detailPosts.length;
     } catch (err) {
       // 個別スレッドの失敗は全体を中断しない(一覧には resCount 掲載のまま表示)
       runSummary.detailFailed++;

@@ -55,6 +55,9 @@ export function buildRunLog(s) {
   if (s.sexExcluded > 0) {
     lines.push(`- 性別排除: ${s.sexExcluded} 件を除外`);
   }
+  if (s.blackListed > 0) {
+    lines.push(`- ブラックリスト: ${s.blackListed} 件を除外`);
+  }
   const notify = s.notify;
   if (notify) {
     const newThreads =
