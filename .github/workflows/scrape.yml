@@ -15,7 +15,7 @@ name: Scrape and notify
 # 各実行の統計は RUN_SUMMARY_JSON(/tmp 配下)に書き出され、最後に
 # scraper/run-log.mjs 経由で log/latest-run.md に反映・コミットされる
 # (public リポジトリに「最終実行ログ 1 ファイル」を残すため。統計のみで
-#  ドメイン・URL・スレタイ・投稿内容・gist URL は含めない)。
+#  ドメイン・URL・スレタイ・投稿内容・gist URL・キーワード値は含めない)。
 
 on:
   schedule:
@@ -59,9 +59,11 @@ jobs:
           fi
 
       - name: Restore new-thread detection state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
-          path: .scrape-state.json
+          path: |
+            .scrape-state.json
+            .post-state.json
           key: scrape-state-v1-${{ github.run_id }}
           restore-keys: scrape-state-v1-
 
@@ -93,14 +95,35 @@ jobs:
           RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run notify
 
+      - name: Cache Playwright browser
+        # chromium のダウンロード(~150MB)を 5 分おきに繰り返さないためキャッシュ
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+
+      - name: Auto post (Playwright)
+        # 設定 gist の "post" ブロックに従い、Playwright(Chromium)で投稿フォームを
+        # 自動操作する。post ブロックがなければ何もせず終了する
+        env:
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
+          RUN_SUMMARY_JSON: /tmp/run-summary.json
+        run: |
+          npx playwright install chromium
+          npm run post
+
       - name: Save new-thread detection state
         # DISCORD_WEBHOOK_URL / GIST_TOKEN 未登録時は notify が状態を更新しないため
         # ファイルが存在しない。actions/cache/save は存在しないパスで失敗するため、
         # 存在するときだけ保存する
-        if: ${{ hashFiles('.scrape-state.json') != '' }}
-        uses: actions/cache/save@v4
+        if: ${{ hashFiles('.scrape-state.json', '.post-state.json') != '' }}
+        uses: actions/cache/save@v5
         with:
-          path: .scrape-state.json
+          path: |
+            .scrape-state.json
+            .post-state.json
           key: scrape-state-v1-${{ github.run_id }}
 
       - name: Update latest run log (log/latest-run.md)

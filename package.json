@@ -7,7 +7,8 @@
   "scripts": {
     "scrape": "node --env-file-if-exists=.env scraper/index.mjs",
     "notify": "node --env-file-if-exists=.env scraper/notify.mjs",
-    "batch": "npm run scrape && npm run notify",
+    "post": "node --env-file-if-exists=.env poster/index.mjs",
+    "batch": "npm run scrape && npm run notify && npm run post",
     "dev": "sh -c 'if [ -f .env ]; then npx wrangler dev --env-file .env; else npx wrangler dev; fi'",
     "deploy": "npx wrangler deploy",
     "gh-action-test": "npm run batch"
@@ -16,6 +17,7 @@
     "cheerio": "^1.1.2"
   },
   "devDependencies": {
+    "playwright": "^1.49.0",
     "wrangler": "^4.129.0"
   }
 }
