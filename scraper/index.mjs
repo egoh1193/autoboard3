@@ -374,6 +374,39 @@ async function main() {
     `[scraper] フィルタ後: ${threads.length} 件` +
       (threads.length !== allThreads.length ? `(除外 ${allThreads.length - threads.length} 件)` : ""),
   );
+
+  // 3.5 直接指定スレッド(config.directThreads)。
+  // 「メインスレ」など一覧を経由せず毎回巡回したいスレを URL で直接指定する。
+  // 要素は URL 文字列 or {url, title, newestFirst}:
+  //   - newestFirst: true のスレは降順ページング(p=1 が最新)として取得する
+  // 明示指定のためタイトルフィルタ(matchesFilters)は適用しない。
+  // 一覧由来のスレと ID が重複した場合は一覧側を優先してスキップ
+  let directCount = 0;
+  const seenDirect = new Set(threads.map((t) => t.id));
+  for (const entry of config.directThreads ?? []) {
+    const spec = typeof entry === "string" ? { url: entry } : (entry ?? {});
+    const url = String(spec.url ?? "").trim();
+    if (!url) continue;
+    const resolved = resolveUrl(url, config.targetUrl);
+    const id = threadIdFromUrl(resolved);
+    if (!id || seenDirect.has(id)) continue;
+    seenDirect.add(id);
+    threads.push({
+      id,
+      title: String(spec.title ?? ""),
+      url: resolved,
+      category: "(直接指定)",
+      resCount: 0,
+      createdAt: "",
+      newestFirst: Boolean(spec.newestFirst),
+    });
+    directCount++;
+  }
+  if (directCount > 0) {
+    console.log(`[scraper] 直接指定スレ: ${directCount} 件を巡回対象に追加`);
+    runSummary.directThreads = directCount;
+  }
+
   // 詳細取得の件数上限(環境変数 SCRAPER_MAX_THREADS)。手元での動作確認用。
   // 1 スレ = 詳細ページ + メール送信ページの複数リクエストが intervalMs 以上の
   // 間隔で走るため、全件だと時間がかかる(リスト自体は制限前の全件を出力する)
@@ -392,10 +425,12 @@ async function main() {
   const maxThreadPages = config.thread?.maxPages ?? 1;
 
   // B ページ(スレ本文)の取得範囲: 実行時から maxAgeDays 日前まで。
-  // ページは昇順(p=1 が最古)のため、ナビの p=N リンクから最終ページを推定して
+  // 通常スレは昇順(p=1 が最古)のため、ナビの p=N リンクから最終ページを推定して
   // 新しい側から遡り、全レスが範囲外になったページで打ち切る
   // (先頭から順に取得すると、伸びたスレの範囲内レスのために古いページを
   //  大量に取得することになるため)。
+  // directThreads で newestFirst: true を指定したスレは降順(p=1 が最新)なので
+  // p=1 から順に取得し、全レスが範囲外になったページで打ち切る
   // モックのサンプル日時は固定なので、モックモードでは範囲制限をしない
   // (テスト時は SCRAPER_MAX_AGE_DAYS 環境変数で明示指定できる)
   const envMaxAgeDays = Number(process.env.SCRAPER_MAX_AGE_DAYS);
@@ -435,7 +470,9 @@ async function main() {
     // 先頭ページ(p=1)を取得: タイトルとページ送りナビ(最終ページの推定元)を得る
     const firstHtml = await getHtml(thread.url, "sample-thread.html");
     const parsedFirst = parseThread(firstHtml, config.thread);
-    const title = parsedFirst.title;
+    // 直接指定スレ(thread.newestFirst)などタイトル要素がないページは
+    // config の title(directThreads の title)をフォールバックに使う
+    const title = parsedFirst.title || thread.title || "";
 
     const byNum = new Map(); // レス番号 → レス(ページ送り・ページ跨ぎの重複排除)
     const collect = (pagePosts) => {
@@ -445,7 +482,19 @@ async function main() {
     };
     collect(parsedFirst.posts);
 
-    if (cutoffTs !== null) {
+    if (thread.newestFirst) {
+      // 降順ページング(p=1 が最新・p=2 が過去)のスレ:
+      // 新しい側(p=1)から順に取得し、1 ページ全部が範囲外になった時点で
+      // 打ち切る(降順なのでそれより古いページも範囲外のため)
+      let fetchedPages = 1; // p=1 分
+      for (let p = 2; fetchedPages < maxThreadPages; p++) {
+        const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
+        const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
+        collect(parsed.posts);
+        fetchedPages++;
+        if (cutoffTs !== null && !parsed.posts.some(postInRange)) break;
+      }
+    } else if (cutoffTs !== null) {
       // ナビの p=N リンクから最終ページ番号を推定し、新しい側から遡る
       // (HTML 実体参照の &amp; は先に展開しておく)
       let lastPage = 1;

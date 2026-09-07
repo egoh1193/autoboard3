@@ -165,7 +165,9 @@ function parseThreadHrSplit(html, threadConfig) {
       date = dateIdx === -1 ? "" : lines[dateIdx].match(dateRe)[0];
       bodyLines = lines.slice(opIdx + 1, dateIdx === -1 ? lines.length : dateIdx);
     } else {
-      // 通常レス: 先頭行は "NN[名前][編集][通報]..." 形式
+      // 通常レス: "NN[名前][編集][通報]..." 形式の行(日時行が先頭にある
+      // 形式では番号行の前に行が来る)。numberPattern は日時行と区別できる
+      // ように([名前] を伴う)config 側で指定する
       const numIdx = lines.findIndex((l) => numberRe.test(l));
       if (numIdx === -1) continue;
       num = Number(lines[numIdx].match(numberRe)[1]);
@@ -174,6 +176,13 @@ function parseThreadHrSplit(html, threadConfig) {
       const dateIdx = lines.findIndex((l, i) => i > numIdx && dateRe.test(l));
       date = dateIdx === -1 ? "" : lines[dateIdx].match(dateRe)[0];
       bodyLines = lines.slice(numIdx + 1, dateIdx === -1 ? lines.length : dateIdx);
+    }
+    if (!date) {
+      // 日時行がレス番号行より前にある形式(日時 → レス番号の順)への対応:
+      // チャンク全体から最初の日時を取る(本文行は番号行以降なので
+      // 前にある日時行が本文に混入することはない)
+      const dm = text.match(dateRe);
+      if (dm) date = dm[0];
     }
 
     if (!num) continue;

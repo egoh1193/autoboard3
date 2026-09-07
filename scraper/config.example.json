@@ -16,6 +16,7 @@
     "titleExcludes": [],
     "sexExcludes": []
   },
+  "directThreads": [],
   "site": {
     "cacheTtlSec": 300,
     "maxDetailThreads": 20,
@@ -39,7 +40,7 @@
     "titleStrip": "^[□■]\\s*",
     "post": {
       "requireNumberSpan": "span[id^='b']",
-      "numberPattern": "^\\s*(\\d+)",
+      "numberPattern": "(\\d+)\\s*\\[",
       "namePattern": "^\\d+\\s*\\[([^\\]]*)\\]",
       "opPattern": "\\d+\\s*\\[☆\\]",
       "datePattern": "\\d{4}-\\d{2}-\\d{2}[ \\t]+\\d{1,2}:\\d{2}(?::\\d{2})?",
@@ -47,6 +48,7 @@
       "metaPatterns": {
         "age": "年齢[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
         "sex": "性別[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
+        "area": "地域[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
         "looks": "ﾙｯｸｽ[^\\S\\n]*[：:][^\\S\\n]*([^\\n]*)",
         "wish": "(?:^|\\n)([^\\n]{0,8}希望)(?=\\n)",
         "ip": "IP[^\\S\\n]*:[^\\S\\n]*([^\\n]*)",
