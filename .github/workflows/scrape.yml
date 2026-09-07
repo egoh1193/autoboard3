@@ -20,6 +20,8 @@ name: Scrape and notify
 on:
   schedule:
     - cron: "7 * * * *" # 毎時 7 分(GitHub Actions の cron は数分遅延することがある)
+  push:
+    branches: [main] # 手元検証用(main への push でも実行。bot の run log push は GITHUB_TOKEN のため再トリガーされない)
   workflow_dispatch:
 
 concurrency:
