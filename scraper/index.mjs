@@ -405,6 +405,12 @@ async function main() {
       resCount: 0,
       createdAt: "",
       newestFirst: Boolean(spec.newestFirst),
+      // スレ単位の上限上書き(重たいスレを個別に軽量化するため)。
+      // 未指定なら共通値(thread.maxPages / thread.maxAgeDays)を使う
+      maxPages: Number(spec.maxPages) > 0 ? Number(spec.maxPages) : undefined,
+      maxAgeDays: spec.maxAgeDays === undefined || spec.maxAgeDays === null
+        ? undefined
+        : Number(spec.maxAgeDays),
     });
     directCount++;
   }
@@ -454,13 +460,6 @@ async function main() {
   const pageParam = config.thread?.pageParam ?? "p";
   const lastPageRe = new RegExp(config.thread?.lastPagePattern ?? "[?&]p=(\\d+)", "g");
 
-  // レスが取得範囲内(実行時から maxAgeDays 日前以降)か
-  const postInRange = (post) => {
-    if (cutoffTs === null) return true;
-    const ts = parsePostDateMs(post.date);
-    return ts !== null && ts >= cutoffTs;
-  };
-
   // 個別ページ(メール送信ページ)からのメールアドレス抽出。
   // 1 レスごとに 1 リクエスト必要なため、サブリクエスト上限のある
   // 系統①(Worker)では行わず、このバッチ側でのみ実施する。
@@ -473,6 +472,22 @@ async function main() {
   const mailEmailCache = new Map(); // メール送信ページ URL → メールアドレス(重複取得防止)
 
   async function fetchThreadDetail(thread) {
+    // スレ単位の上限上書き(directThreads の各要素の maxPages / maxAgeDays)。
+    // 未指定の項目は共通値(thread.maxPages / thread.maxAgeDays)を使う
+    const maxPages = Number(thread.maxPages) > 0 ? Number(thread.maxPages) : maxThreadPages;
+    const cutoff =
+      thread.maxAgeDays === undefined
+        ? cutoffTs
+        : Number(thread.maxAgeDays) > 0
+          ? Date.now() - Number(thread.maxAgeDays) * 86400_000
+          : null; // maxAgeDays: 0 なら範囲制限なし
+    // レスが取得範囲内(実行時から maxAgeDays 日前以降)か
+    const postInRange = (post) => {
+      if (cutoff === null) return true;
+      const ts = parsePostDateMs(post.date);
+      return ts !== null && ts >= cutoff;
+    };
+
     // 先頭ページ(p=1)を取得: タイトルとページ送りナビ(最終ページの推定元)を得る
     const firstHtml = await getHtml(thread.url, "sample-thread.html");
     const parsedFirst = parseThread(firstHtml, config.thread);
@@ -493,14 +508,14 @@ async function main() {
       // 新しい側(p=1)から順に取得し、1 ページ全部が範囲外になった時点で
       // 打ち切る(降順なのでそれより古いページも範囲外のため)
       let fetchedPages = 1; // p=1 分
-      for (let p = 2; fetchedPages < maxThreadPages; p++) {
+      for (let p = 2; fetchedPages < maxPages; p++) {
         const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
         const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
         collect(parsed.posts);
         fetchedPages++;
-        if (cutoffTs !== null && !parsed.posts.some(postInRange)) break;
+        if (cutoff !== null && !parsed.posts.some(postInRange)) break;
       }
-    } else if (cutoffTs !== null) {
+    } else if (cutoff !== null) {
       // ナビの p=N リンクから最終ページ番号を推定し、新しい側から遡る
       // (HTML 実体参照の &amp; は先に展開しておく)
       let lastPage = 1;
@@ -508,7 +523,7 @@ async function main() {
         lastPage = Math.max(lastPage, Number(m[1]));
       }
       let fetchedPages = 1; // p=1 分
-      for (let p = lastPage; p >= 2 && fetchedPages < maxThreadPages; p--) {
+      for (let p = lastPage; p >= 2 && fetchedPages < maxPages; p--) {
         const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
         const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
         collect(parsed.posts);
@@ -517,10 +532,10 @@ async function main() {
         if (!parsed.posts.some(postInRange)) break;
       }
     } else {
-      // 範囲制限なし: 従来どおり nextPage リンクを辿る(maxThreadPages ページまで)
+      // 範囲制限なし: 従来どおり nextPage リンクを辿る(maxPages ページまで)
       let pageUrl = thread.url;
       let html = firstHtml;
-      for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
+      for (let page = 1; page <= maxPages && pageUrl; page++) {
         const parsed = page === 1 ? parsedFirst : parseThread(html, config.thread);
         collect(parsed.posts);
         const nextHref = parseNextPageUrl(html, config.thread);
