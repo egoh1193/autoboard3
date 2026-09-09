@@ -135,6 +135,20 @@ function parseThreadHrSplit(html, threadConfig) {
     : null;
   // レス添付画像の URL(サムネイル)。1 レスに複数あるため全件マッチで配列にする
   const imageRe = c.imagePattern ? new RegExp(c.imagePattern, "g") : null;
+  // 付帯情報行(年齢・性別・地域・IP・機種など)の判定用。チャンク末尾に付く
+  // メタ行を本文ブロックから除くために使う
+  const metaRes = Object.values(c.metaPatterns ?? {}).map((p) => new RegExp(p));
+  // 本文の終端インデックス(排他的)。日時行が本文より後にある形式なら日時行の
+  // 直前まで。日時行が番号行より前にある形式(日時 → レス番号の順)では本文の
+  // 後に付帯情報行が続くため、最初の付帯情報行で打ち切る(打ち切らないと
+  // 本文ブロックにメタ行が混入する)
+  const bodyEndIdx = (lines, startIdx, dateIdx) => {
+    if (dateIdx !== -1) return dateIdx;
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      if (lines[i] && metaRes.some((re) => re.test(lines[i]))) return i;
+    }
+    return lines.length;
+  };
 
   const posts = [];
   for (const rawChunk of html.split(/<hr[^>]*>/i)) {
@@ -163,7 +177,7 @@ function parseThreadHrSplit(html, threadConfig) {
       name = m[2];
       const dateIdx = lines.findIndex((l, i) => i > opIdx && dateRe.test(l));
       date = dateIdx === -1 ? "" : lines[dateIdx].match(dateRe)[0];
-      bodyLines = lines.slice(opIdx + 1, dateIdx === -1 ? lines.length : dateIdx);
+      bodyLines = lines.slice(opIdx + 1, bodyEndIdx(lines, opIdx, dateIdx));
     } else {
       // 通常レス: "NN[名前][編集][通報]..." 形式の行(日時行が先頭にある
       // 形式では番号行の前に行が来る)。numberPattern は日時行と区別できる
@@ -175,7 +189,7 @@ function parseThreadHrSplit(html, threadConfig) {
       name = nm ? nm[1] : "";
       const dateIdx = lines.findIndex((l, i) => i > numIdx && dateRe.test(l));
       date = dateIdx === -1 ? "" : lines[dateIdx].match(dateRe)[0];
-      bodyLines = lines.slice(numIdx + 1, dateIdx === -1 ? lines.length : dateIdx);
+      bodyLines = lines.slice(numIdx + 1, bodyEndIdx(lines, numIdx, dateIdx));
     }
     if (!date) {
       // 日時行がレス番号行より前にある形式(日時 → レス番号の順)への対応:

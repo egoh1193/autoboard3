@@ -214,6 +214,11 @@ async function main() {
   // 旧形式の状態ファイルには無いため {} として扱う(その実行は新着多めになる)
   const knownPosts = state?.knownPosts ?? {};
 
+  // 本文が空 or 2 文字以下のレスは募集削除の可能性が高いため通知から除外する
+  // (基準 knownPosts には通常どおり含むため、後から 本文が変わっても
+  // 同じレス番号で再通知されることはない)
+  const isNotifiableBody = (post) => String(post?.body ?? "").trim().length > 2;
+
   // 新着の差分を組み立てる:
   // - 新規スレ(knownIds に無い)→ 窓内の全レスが新着
   // - 既存スレ → 既知の最終レス番号より大きいレス番号のレスが新着
@@ -237,14 +242,17 @@ async function main() {
     }
     const maxNum = posts.reduce((m, p) => Math.max(m, Number(p.num) || 0), 0);
     if (!knownIds.has(thread.id)) {
-      // 新規スレ: 通知できるレス(窓内)があれば全レスを新着として通知する
-      if (hasDetail && posts.length > 0) {
-        entries.push({ thread, posts });
+      // 新規スレ: 通知できるレス(窓内・募集削除以外)があれば全レスを新着として通知する
+      const notifyPosts = posts.filter(isNotifiableBody);
+      if (hasDetail && notifyPosts.length > 0) {
+        entries.push({ thread, posts: notifyPosts });
       } else {
         noDetailCount++;
       }
     } else {
-      const fresh = posts.filter((p) => (Number(p.num) || 0) > baseline);
+      const fresh = posts.filter(
+        (p) => (Number(p.num) || 0) > baseline && isNotifiableBody(p),
+      );
       if (fresh.length > 0) {
         entries.push({ thread, posts: fresh });
       }
