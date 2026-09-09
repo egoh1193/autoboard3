@@ -1,8 +1,10 @@
 // 系統②:通知(scraper/notify.mjs)
 //
 // 直前のスクレイプ結果(site/data/threads.json)と状態ファイル(.scrape-state.json)
-// を比較し、前回以降に新しく見つかったスレッドの新着レスを「投稿者ごと」に
-// まとめて GitHub Gist に投稿し、その URL を Discord webhook に投稿する
+// を比較し、前回以降の新着を「投稿者ごと」にまとめて GitHub Gist に投稿し、
+// その URL を Discord webhook に投稿する。
+// 差分はレス単位: 新規スレは窓内の全レス、既存スレは状態に保存した
+// 既知の最終レス番号(knownPosts)より大きいレス番号のレスが新着になる
 // (本文そのものは Discord に送らない)。各レスの見出しには元投稿スレ
 // (タイトル・URL)を付ける。
 // 状態ファイルは GitHub Actions の actions/cache で次回実行へ引き継ぐ。
@@ -77,16 +79,15 @@ function formatPost(post) {
   return lines.join("\n");
 }
 
-// 新着スレのレスを「投稿者ごと」にグループ化する。
+// 新着スレ・新着レスを「投稿者ごと」にグループ化する。
+// entries: [{ thread, posts }](新規スレは全レス、既存スレは新着レスのみ)
 // 戻り値: Map(投稿者名 → Map(スレッドID → { thread, posts }))
 // 投稿者名が空のレスは「(名前なし)」にまとめる。同一投稿者のレスは
 // 元投稿スレ(タイトル・URL)を付けてスレ単位で束ねて出力する
-function groupPostsByAuthor(newThreads, details) {
+function groupPostsByAuthor(entries) {
   const byAuthor = new Map();
-  for (const thread of newThreads) {
-    const detail = details[thread.id];
-    if (!detail) continue; // 本文取得失敗スレは投稿者一覧に出せないためスキップ
-    for (const post of detail.posts) {
+  for (const { thread, posts } of entries) {
+    for (const post of posts) {
       const name = (post.name ?? "").trim() || "(名前なし)";
       if (!byAuthor.has(name)) byAuthor.set(name, new Map());
       const threadsMap = byAuthor.get(name);
@@ -99,25 +100,21 @@ function groupPostsByAuthor(newThreads, details) {
 
 // 新着投稿一覧を「投稿者ごと」に組み立てて Gist に投稿する Markdown を作る。
 // 各レスの見出しに元投稿スレ(タイトル・URL)を付与する
-function buildGistContent({ newThreads, details, generatedAt, isFirstRun, totalThreads }) {
-  const byAuthor = groupPostsByAuthor(newThreads, details);
-  const postCount = [...byAuthor.values()].reduce(
-    (n, threadsMap) => n + [...threadsMap.values()].reduce((x, g) => x + g.posts.length, 0),
-    0,
-  );
+function buildGistContent({ entries, generatedAt, isFirstRun, totalThreads, noDetailCount }) {
+  const byAuthor = groupPostsByAuthor(entries);
+  const postCount = entries.reduce((n, e) => n + e.posts.length, 0);
   const lines = [];
   lines.push(
     isFirstRun
-      ? `# 初回実行: 現在の対象スレ ${newThreads.length} 件(次回からは新着のみ)`
-      : `# 新着投稿 ${postCount} 件(投稿者 ${byAuthor.size} 名 / 新着スレ ${newThreads.length} 件)`,
+      ? `# 初回実行: 現在の対象スレ ${entries.length} 件(次回からは新着のみ)`
+      : `# 新着投稿 ${postCount} 件(投稿者 ${byAuthor.size} 名 / スレ ${entries.length} 件)`,
   );
   lines.push("");
   lines.push(`- スクレイプ生成日時: ${generatedAt}`);
   lines.push(`- 対象スレ合計: ${totalThreads} 件`);
   // 本文未取得スレは投稿者一覧に出せないため、存在だけ明記する
-  const noDetail = newThreads.filter((t) => !details[t.id]);
-  if (noDetail.length > 0) {
-    lines.push(`- 本文未取得スレ: ${noDetail.length} 件(以下の投稿者一覧には含まれない)`);
+  if (noDetailCount > 0) {
+    lines.push(`- 本文未取得スレ: ${noDetailCount} 件(以下の投稿者一覧には含まれない)`);
   }
   lines.push("");
 
@@ -190,7 +187,11 @@ async function mergeNotifySummary(status) {
   if (!summaryPath) return;
   try {
     const summary = JSON.parse(await readFile(summaryPath, "utf8"));
-    summary.notify = { status, newThreads: notifyNewThreads };
+    summary.notify = {
+      status,
+      newThreads: notifyNewThreads,
+      newPosts: notifyNewPosts,
+    };
     await writeFile(summaryPath, JSON.stringify(summary, null, 2));
   } catch (err) {
     console.warn(`[notify] 警告: 実行サマリの更新に失敗しました: ${err.message}`);
@@ -198,6 +199,7 @@ async function mergeNotifySummary(status) {
 }
 
 let notifyNewThreads = 0;
+let notifyNewPosts = 0;
 
 async function main() {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -208,11 +210,55 @@ async function main() {
   const { generatedAt, threads } = JSON.parse(await readFile(DATA_PATH, "utf8"));
   const state = await loadState(statePath);
   const knownIds = new Set(state?.knownIds ?? []);
-  const newThreads = threads.filter((t) => !knownIds.has(t.id));
-  notifyNewThreads = newThreads.length;
+  // スレごとの既知最終レス番号(レス単位の差分検出用)。
+  // 旧形式の状態ファイルには無いため {} として扱う(その実行は新着多めになる)
+  const knownPosts = state?.knownPosts ?? {};
+
+  // 新着の差分を組み立てる:
+  // - 新規スレ(knownIds に無い)→ 窓内の全レスが新着
+  // - 既存スレ → 既知の最終レス番号より大きいレス番号のレスが新着
+  // 詳細ファイルが無いスレ(本文取得失敗)はレスが拾えないため、
+  // レス番号の基準も進めない(次回に新着として通知される)
+  const entries = [];
+  let noDetailCount = 0;
+  const nextKnownPosts = { ...knownPosts };
+  for (const thread of threads) {
+    const baseline = Number(knownPosts[thread.id]) || 0;
+    let posts = [];
+    let hasDetail = true;
+    try {
+      const detail = JSON.parse(
+        await readFile(path.join(DETAIL_DIR, `${thread.id}.json`), "utf8"),
+      );
+      posts = Array.isArray(detail.posts) ? detail.posts : [];
+    } catch (err) {
+      if (err.code === "ENOENT") hasDetail = false;
+      else throw err;
+    }
+    const maxNum = posts.reduce((m, p) => Math.max(m, Number(p.num) || 0), 0);
+    if (!knownIds.has(thread.id)) {
+      // 新規スレ: 通知できるレス(窓内)があれば全レスを新着として通知する
+      if (hasDetail && posts.length > 0) {
+        entries.push({ thread, posts });
+      } else {
+        noDetailCount++;
+      }
+    } else {
+      const fresh = posts.filter((p) => (Number(p.num) || 0) > baseline);
+      if (fresh.length > 0) {
+        entries.push({ thread, posts: fresh });
+      }
+    }
+    // 基準は単調に進める(レス窓の関係で 1 回だけレスが取れない実行が
+    // あっても基準が下がらず、同じレスを重複通知しない)
+    if (maxNum > baseline) nextKnownPosts[thread.id] = maxNum;
+  }
+  const totalNewPosts = entries.reduce((n, e) => n + e.posts.length, 0);
+  notifyNewThreads = entries.length;
+  notifyNewPosts = totalNewPosts;
 
   console.log(
-    `[notify] スクレイプ結果: ${threads.length} 件 (生成 ${generatedAt}) / 既知: ${knownIds.size} 件 / 新着: ${newThreads.length} 件`,
+    `[notify] スクレイプ結果: ${threads.length} 件 (生成 ${generatedAt}) / 既知スレ: ${knownIds.size} 件 / 新着: ${entries.length} スレ ${totalNewPosts} レス`,
   );
 
   if (!webhookUrl || !gistToken) {
@@ -223,37 +269,24 @@ async function main() {
     return;
   }
 
-  if (newThreads.length > 0) {
-    // 新着スレの本文詳細を読み込む(取得失敗でファイルがないスレはメタ情報のみ)
-    const details = {};
-    for (const thread of newThreads) {
-      try {
-        details[thread.id] = JSON.parse(
-          await readFile(path.join(DETAIL_DIR, `${thread.id}.json`), "utf8"),
-        );
-      } catch (err) {
-        if (err.code === "ENOENT") continue;
-        throw err;
-      }
-    }
-
+  if (entries.length > 0) {
     const content = buildGistContent({
-      newThreads,
-      details,
+      entries,
       generatedAt,
       isFirstRun: state === null,
       totalThreads: threads.length,
+      noDetailCount,
     });
     const stamp = new Date(generatedAt).toISOString().replace(/[:.]/g, "-");
     const gistUrl = await createGist(
       gistToken,
       gistApiUrl,
       `new-posts-${stamp}.md`,
-      `掲示板ミラー 新着投稿(スレ ${newThreads.length} 件 / ${stamp})`,
+      `掲示板ミラー 新着投稿(${entries.length} スレ / ${totalNewPosts} レス / ${stamp})`,
       content,
     );
     // gist URL はログに出さない(URL を知れば閲覧可のため。ローカル・CI 共通)
-    console.log(`[notify] Gist を作成しました(新着 ${newThreads.length} スレ)`);
+    console.log(`[notify] Gist を作成しました(新着 ${entries.length} スレ / ${totalNewPosts} レス)`);
 
     await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
     console.log("[notify] Discord に gist URL を投稿しました");
@@ -263,9 +296,12 @@ async function main() {
     await mergeNotifySummary("no-new");
   }
 
-  // 現在の全スレ ID を次回の「既知」として保存する
+  // 現在の全スレ ID と、スレごとの既知最終レス番号を次回の「既知」として保存する
   const nextKnownIds = [...new Set([...knownIds, ...threads.map((t) => t.id)])];
-  await writeFile(statePath, JSON.stringify({ knownIds: nextKnownIds }, null, 2));
+  await writeFile(
+    statePath,
+    JSON.stringify({ knownIds: nextKnownIds, knownPosts: nextKnownPosts }, null, 2),
+  );
   console.log(`[notify] 状態を保存しました (${statePath}, ${nextKnownIds.length} 件)`);
 }
 

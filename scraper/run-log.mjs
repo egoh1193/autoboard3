@@ -73,9 +73,11 @@ export function buildRunLog(s) {
   }
   const notify = s.notify;
   if (notify) {
-    const newThreads =
-      notify.newThreads != null ? `(新着 ${notify.newThreads} スレ)` : "";
-    lines.push(`- 通知: ${NOTIFY_LABELS[notify.status] ?? notify.status}${newThreads}`);
+    const counts =
+      notify.newThreads != null || notify.newPosts != null
+        ? `(新着 ${notify.newThreads ?? 0} スレ / ${notify.newPosts ?? 0} レス)`
+        : "";
+    lines.push(`- 通知: ${NOTIFY_LABELS[notify.status] ?? notify.status}${counts}`);
   } else {
     lines.push("- 通知: 情報なし");
   }
