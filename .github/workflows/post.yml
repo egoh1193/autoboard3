@@ -1,0 +1,78 @@
+name: Auto post
+
+# 定期投稿(系統③): 設定 gist の JSON 内の "post" ブロックに従い、
+# Playwright(Chromium ヘッドレス)で投稿フォーム(form[name=form01])を
+# 自動操作して掲示板に投稿する。対象掲示板は自営・投稿許可済み。
+# 系統②(スクレイプ・通知)とは分離したワークフローで、この workflow では
+# スクレイプを行わない(状態 .post-state.json も scrape-state-v1 とは別キー)。
+#
+# 実行間隔はここではなく gist の "post" ブロックの intervalMinutes(分)で制御する。
+# この workflow は 1 時間おきに起動し、間隔未経過なら poster が何もせず
+# 終了する(成否問わず試行時刻を記録するため、間隔内の再試行・連打は発生しない)。
+# 投稿間隔・投稿内容・formPath はすべて gist 側の設定で変更できる(再デプロイ不要)。
+#
+# 巡回設定 gist はシークレット SCRAPER_SETTINGS_GIST_URL で指定し、
+# 秘密 gist を読むため GIST_TOKEN(gist 権限の PAT)が必要。
+#
+# 実行結果はこの Actions ログでのみ確認する(件数のみ表示・投稿内容と
+# URL はマスク済みのため public で問題ない。log/latest-run.md には書かない)。
+
+on:
+  schedule:
+    # 1 時間おき(分は混雑時刻の :00 / :30 を避けてずらす)。実際の投稿間隔は
+    # gist の intervalMinutes で制御されるため、この起動頻度は「チェック頻度」
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: auto-post
+  cancel-in-progress: false
+
+jobs:
+  auto-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore post state
+        uses: actions/cache/restore@v5
+        with:
+          path: .post-state.json
+          key: post-state-v1-${{ github.run_id }}
+          restore-keys: post-state-v1-
+
+      - name: Cache Playwright browser
+        # chromium のダウンロード(~150MB)を毎回繰り返さないためキャッシュ
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+
+      - name: Auto post
+        env:
+          # 巡回設定 gist(投稿先・間隔・投稿内容は gist の "post" ブロック)
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
+          # 設定 gist が秘密 gist の場合に必要(gist 権限の PAT)
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          # 投稿先サイトのドメイン(シークレット)
+          SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
+        run: |
+          npx playwright install chromium
+          npm run post
+
+      - name: Save post state
+        # post ブロックが無い場合などは状態ファイルが存在しない。
+        # actions/cache/save は存在しないパスで失敗するため、存在するときだけ保存する
+        if: ${{ hashFiles('.post-state.json') != '' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .post-state.json
+          key: post-state-v1-${{ github.run_id }}

@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 系統①:  閲覧者 → Worker(worker/src/) → 対象掲示板
 系統②:  GitHub Actions (cron) → scraper/index.mjs → scraper/notify.mjs → Gist → Discord(URLのみ)
-系統③:  GitHub Actions (cron) → poster/index.mjs(Playwright) → 投稿フォーム自動操作
+系統③:  GitHub Actions post.yml (cron 1時間おき) → poster/index.mjs(Playwright) → 投稿フォーム自動操作
 ```
 
 ## よく使うコマンド
@@ -99,8 +99,8 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 - フォームの値は gist 側の `fields`(name 属性 → 値)で完全指定。select は値(失敗時ラベル)選択、checkbox は truthy でチェック、text/textarea は fill。**画像認証 `image_auth` は設定不要** — フォーム内の認証画像 `image_auth_N.png` のファイル名から数字を表示順に抜いて自動入力する(`fillImageAuth()`)。画像アップロード(`file[1]`/`file[2]`)は未対応
 - 状態 `.post-state.json`(actions/cache)に `lastPostedAt` / `rotateIndex` を保存。**成否問わず試行ごとに `lastPostedAt` を進める**(失敗しても間隔内に再試行して連打しない)
 - **投稿内容(名前・メール・本文・編集キー)はログに絶対に出さない**(件数のみ)。エラー内の URL も `maskUrl()` でマスク。CI ログ・`log/latest-run.md` と同じ規約
-- Actions では `npx playwright install chromium` を実行(~150MB。actions/cache でキャッシュ)。Worker 内では Playwright は動かない(Cloudflare Browser Rendering なら可だが有料)ため、**系統③はバッチ側のみ**
-- `npm run post` で単体実行(`npm run batch` は scrape → notify → post の順)
+- **Actions は `post.yml`(系統③専用ワークフロー、1 時間おき cron)**で起動し、実際の投稿間隔は gist の `intervalMinutes` で制御する(間隔未経過なら poster が何もせず終了)。`npx playwright install chromium` を実行(~150MB。actions/cache でキャッシュ)。状態 `.post-state.json` は `post-state-v1-` キーの別キャッシュ。**実行結果は post.yml の Actions ログでのみ確認**(件数のみ。log/latest-run.md には書かない)。Worker 内では Playwright は動かない(Cloudflare Browser Rendering なら可だが有料)ため、**系統③はバッチ側のみ**
+- `npm run post` で単体実行(`npm run batch` は scrape → notify → post の順。ローカル専用)
 
 ### 系統② バッチ(index.mjs + notify.mjs)
 

@@ -9,6 +9,7 @@ name: Scrape and notify
 # リポジトリシークレット SCRAPER_CONFIG(JSON 文字列)から復元する。
 # (未設定の場合はモックモードで実行される)
 # 新着検出の状態(.scrape-state.json)は actions/cache で次回実行へ引き継ぐ。
+# 定期投稿(系統③)は別ワークフロー post.yml に分離している。
 # GIST_TOKEN には gist 権限を持つ PAT を指定すること
 # (Actions 既定の GITHUB_TOKEN では gist を作成できない)。
 #
@@ -68,9 +69,7 @@ jobs:
       - name: Restore new-thread detection state
         uses: actions/cache/restore@v5
         with:
-          path: |
-            .scrape-state.json
-            .post-state.json
+          path: .scrape-state.json
           key: scrape-state-v1-${{ github.run_id }}
           restore-keys: scrape-state-v1-
 
@@ -102,35 +101,14 @@ jobs:
           RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run notify
 
-      - name: Cache Playwright browser
-        # chromium のダウンロード(~150MB)を 5 分おきに繰り返さないためキャッシュ
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
-
-      - name: Auto post (Playwright)
-        # 設定 gist の "post" ブロックに従い、Playwright(Chromium)で投稿フォームを
-        # 自動操作する。post ブロックがなければ何もせず終了する
-        env:
-          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-          SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
-          RUN_SUMMARY_JSON: /tmp/run-summary.json
-        run: |
-          npx playwright install chromium
-          npm run post
-
       - name: Save new-thread detection state
         # DISCORD_WEBHOOK_URL / GIST_TOKEN 未登録時は notify が状態を更新しないため
         # ファイルが存在しない。actions/cache/save は存在しないパスで失敗するため、
         # 存在するときだけ保存する
-        if: ${{ hashFiles('.scrape-state.json', '.post-state.json') != '' }}
+        if: ${{ hashFiles('.scrape-state.json') != '' }}
         uses: actions/cache/save@v5
         with:
-          path: |
-            .scrape-state.json
-            .post-state.json
+          path: .scrape-state.json
           key: scrape-state-v1-${{ github.run_id }}
 
       - name: Update latest run log (log/latest-run.md)
