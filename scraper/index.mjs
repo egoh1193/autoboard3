@@ -147,11 +147,27 @@ async function loadGistSettings() {
     // キーワード・性別排除は文字列専用(部分一致のキーワード)
     keywords: splitList(parsed.keywords).filter((v) => typeof v === "string"),
     sexExcludes: splitList(parsed.sexExcludes).filter((v) => typeof v === "string"),
-    // blackList は文字列(メール)とオブジェクト({ mail, keyword })の混合を許す
-    blackList: splitList(parsed.blackList),
+    // blackList は配列(文字列 or {mail, keyword})とオブジェクト
+    // ({ mailList, keywordList })の両方を受ける
+    blackList: normalizeBlackList(parsed.blackList),
     // 直接指定スレ(directThreads)。文字列 or {url, title, newestFirst} の配列
     directThreads: Array.isArray(parsed.directThreads) ? parsed.directThreads : null,
   };
+}
+
+// blackList を判定用の配列(文字列 or { mail, keyword } オブジェクト)に正規化する。
+// - 配列形式(従来): ["mail@example.com", { "keyword": "…" }, …]
+// - オブジェクト形式: { "mailList": ["mail@example.com", …], "keywordList": [
+//     "本文キーワード" または { "keyword": "…", "mail": "…" }, …] }
+function normalizeBlackList(raw) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const mailList = splitList(raw.mailList).filter((v) => typeof v === "string");
+    const keywordList = Array.isArray(raw.keywordList)
+      ? splitList(raw.keywordList)
+      : [];
+    return [...mailList, ...keywordList];
+  }
+  return splitList(raw);
 }
 
 // キーワード(地名など)1 件のスレ検索 URL を組み立てる。
@@ -299,15 +315,17 @@ async function main() {
     config = { ...config, filters: { ...config.filters, sexExcludes } };
   }
 
-  // ブラックリスト(メールアドレス完全一致): 環境変数 > 設定 gist > config.filters.blackList
+  // ブラックリスト(メール完全一致 + 投稿キーワード本文部分一致):
+  // 環境変数 > 設定 gist > config.filters.blackList。形式は
+  // normalizeBlackList(配列形式 / オブジェクト形式の両方)で正規化する。
   // 判定は parse.mjs の isBlacklisted(バッチのみ。Worker はメールページを取得しないため未対応)
-  const envBlackList = splitList(process.env.SCRAPER_BLACKLIST);
+  const envBlackList = normalizeBlackList(process.env.SCRAPER_BLACKLIST);
   const blackList =
     envBlackList.length > 0
       ? envBlackList
       : gistSettings?.blackList.length
         ? gistSettings.blackList
-        : (config.filters?.blackList ?? []);
+        : normalizeBlackList(config.filters?.blackList);
   if (blackList.length > 0) {
     config = { ...config, filters: { ...config.filters, blackList } };
   }
