@@ -74,9 +74,15 @@ async function writeRunSummary() {
   await writeFile(outPath, JSON.stringify(runSummary, null, 2));
 }
 
-// "a, b" / ["a"," b"] を配列に正規化する
+// "a, b" / ["a"," b"] を配列に正規化する。
+// blackList は要素にオブジェクト({ mail, keyword })を許すため、文字列は trim、
+// オブジェクトはそのまま残す(文字列専用のリスト側で非文字列を除く)
 function splitList(value) {
-  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (typeof v === "string" ? v.trim() : v))
+      .filter((v) => v != null && (typeof v !== "string" || v.length > 0));
+  }
   if (typeof value === "string") {
     return value
       .split(/[,,]/)
@@ -138,8 +144,10 @@ async function loadGistSettings() {
     throw new Error(`設定 gist の JSON を解釈できませんでした: ${err.message}`);
   }
   return {
-    keywords: splitList(parsed.keywords),
-    sexExcludes: splitList(parsed.sexExcludes),
+    // キーワード・性別排除は文字列専用(部分一致のキーワード)
+    keywords: splitList(parsed.keywords).filter((v) => typeof v === "string"),
+    sexExcludes: splitList(parsed.sexExcludes).filter((v) => typeof v === "string"),
+    // blackList は文字列(メール)とオブジェクト({ mail, keyword })の混合を許す
     blackList: splitList(parsed.blackList),
     // 直接指定スレ(directThreads)。文字列 or {url, title, newestFirst} の配列
     directThreads: Array.isArray(parsed.directThreads) ? parsed.directThreads : null,

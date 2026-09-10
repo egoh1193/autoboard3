@@ -252,18 +252,45 @@ export function isSexExcluded(post, filters) {
   return excludes.some((kw) => post.sex.includes(kw));
 }
 
-// レスのメールアドレス(post.email)がブラックリスト(filters.blackList)に
-// 該当するか。大文字小文字・前後の空白を無視した完全一致。post.email が
-// 空なら常に false(メールを持たないレスは対象外)
+// レスがブラックリスト(filters.blackList)に該当するか。
+// 各要素は次のどちらかの形式:
+//   文字列                          … メールアドレス完全一致
+//                                    (大文字小文字・前後の空白は無視)
+//   { "mail": "...", "keyword": "…" } … mail はメールアドレス完全一致、
+//                                    keyword は**投稿本文への部分一致**
+//                                    (大文字小文字を無視)。
+//                                    メールだけを変えて同じ広告を書く投稿者を
+//                                    落とすための投稿キーワード指定
+// mail と keyword の両方を指定した場合は AND 条件(両方合致したら該当)。
 // 注意: post.email は個別メールページの取得後に確定するため、
 // バッチ(index.mjs)でしか判定できない(Worker はメールページを取らない)
 export function isBlacklisted(post, filters) {
   const blackList = filters?.blackList ?? [];
-  const email = (post?.email ?? "").trim().toLowerCase();
-  if (!email) {
+  if (blackList.length === 0) {
     return false;
   }
-  return blackList.some((entry) => (entry ?? "").trim().toLowerCase() === email);
+  const email = (post?.email ?? "").trim().toLowerCase();
+  const body = (post?.body ?? "").toLowerCase();
+  return blackList.some((entry) => {
+    if (typeof entry === "string") {
+      return email !== "" && entry.trim().toLowerCase() === email;
+    }
+    if (entry && typeof entry === "object") {
+      const mail = (entry.mail ?? "").trim().toLowerCase();
+      const keyword = (entry.keyword ?? "").trim().toLowerCase();
+      if (mail === "" && keyword === "") {
+        return false;
+      }
+      if (mail !== "" && keyword !== "") {
+        return email !== "" && email === mail && body.includes(keyword);
+      }
+      if (mail !== "") {
+        return email !== "" && email === mail;
+      }
+      return body.includes(keyword);
+    }
+    return false;
+  });
 }
 
 // URL からスレッドのファイル名に使う ID を作る。
