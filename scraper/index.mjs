@@ -334,9 +334,21 @@ async function main() {
   // スレ検索 URL を組み立てて各検索結果をスレ一覧として扱う。
   // なければ categoryList の取得、それもなければ targetUrl を直接スレッド一覧として扱う
   // キーワードの値(地名など)は実行ログ・実行サマリに出さない(件数のみ)
+  //
+  // SCRAPER_DIRECT_ONLY=1 の場合はキーワード検索・一覧巡回を省き、
+  // directThreads(メインスレ)だけを取得する。メインスレ専用の軽量
+  // ワークフロー(高頻度 cron)向け。directThreads は設定 gist から読むため
+  // gist の読み込み自体は行う(失敗時は従来どおり実行を中止する)
+  const directOnly = process.env.SCRAPER_DIRECT_ONLY === "1";
+  // SCRAPER_SKIP_DIRECT=1 の場合は directThreads を巡回しない。
+  // 地域別巡回のワークフローで直接指定スレを別ワークフローに任せるためのフラグ
+  // (両フラグとも未設定なら、これまでどおり一覧 + directThreads の両方を巡回する)
+  const skipDirect = process.env.SCRAPER_SKIP_DIRECT === "1";
   runSummary.keywords = keywords.length;
   let categories = [];
-  if (keywords.length > 0) {
+  if (directOnly) {
+    console.log("[scraper] 直接指定スレのみを巡回します(SCRAPER_DIRECT_ONLY=1)");
+  } else if (keywords.length > 0) {
     categories = keywords.map((kw) => ({ name: kw, url: buildSearchUrl(config, kw) }));
     console.log(`[scraper] キーワード検索: ${keywords.length} 件`);
     for (const [i, category] of categories.entries()) {
@@ -349,7 +361,7 @@ async function main() {
       .filter((c) => c.name || c.url);
     console.log(`[scraper] カテゴリ: ${categories.length} 件`);
   }
-  if (categories.length === 0) {
+  if (!directOnly && categories.length === 0) {
     categories = [{ name: "", url: config.targetUrl }];
   }
 
@@ -410,11 +422,19 @@ async function main() {
   // 優先順: 設定 gist(gist の JSON に directThreads があればそちら) > config
   // 明示指定のためタイトルフィルタ(matchesFilters)は適用しない。
   // 一覧由来のスレと ID が重複した場合は一覧側を優先してスキップ
-  const directThreadSpecs = gistSettings?.directThreads?.length
-    ? gistSettings.directThreads
-    : (config.directThreads ?? []);
+  // SCRAPER_SKIP_DIRECT=1 の場合は directThreads をスキップする(直接指定スレは
+  // 別ワークフロー(SCRAPER_DIRECT_ONLY=1)が取得・通知するため二重通知を避ける)
+  const directThreadSpecs = skipDirect
+    ? []
+    : gistSettings?.directThreads?.length
+      ? gistSettings.directThreads
+      : (config.directThreads ?? []);
+  if (skipDirect) {
+    console.log("[scraper] 直接指定スレはスキップします(SCRAPER_SKIP_DIRECT=1・別実行が担当)");
+  }
   let directCount = 0;
-  const seenDirect = new Set(threads.map((t) => t.id));
+  // 直接指定のみのモードでは一覧由来スレが無いため、重複チェックは空から始める
+  const seenDirect = new Set(directOnly ? [] : threads.map((t) => t.id));
   for (const entry of directThreadSpecs) {
     const spec = typeof entry === "string" ? { url: entry } : (entry ?? {});
     const url = String(spec.url ?? "").trim();
@@ -456,6 +476,13 @@ async function main() {
     );
   }
   if (threads.length === 0) {
+    if (directOnly) {
+      // 直接指定のみのモードで directThreads 未設定のときは、エラーにせず
+      // 何もせず正常終了する(毎回失敗する workflow を作らないため)
+      console.log("[scraper] 直接指定スレが未設定のため、何もせず終了します");
+      await writeRunSummary();
+      return;
+    }
     throw new Error("フィルタ条件に一致するスレッドがありません。filters の設定を確認してください。");
   }
 

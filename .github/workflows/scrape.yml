@@ -10,6 +10,9 @@ name: Scrape and notify
 # (未設定の場合はモックモードで実行される)
 # 新着検出の状態(.scrape-state.json)は actions/cache で次回実行へ引き継ぐ。
 # 定期投稿(系統③)は別ワークフロー post.yml に分離している。
+# メインスレ(directThreads)の高頻度巡回も別ワークフロー scrape-main.yml に
+# 分離している(この workflow は SCRAPER_SKIP_DIRECT=1 で直接指定スレを
+# スキップし、二重通知を避けている)。
 # GIST_TOKEN には gist 権限を持つ PAT を指定すること
 # (Actions 既定の GITHUB_TOKEN では gist を作成できない)。
 #
@@ -92,6 +95,9 @@ jobs:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           # 実行サマリの書き出し先(log/latest-run.md 更新の入力)
           RUN_SUMMARY_JSON: /tmp/run-summary.json
+          # 直接指定スレ(directThreads)は scrape-main.yml が高頻度で巡回するため、
+          # ここではスキップする(同じスレを二重に通知しないため)
+          SCRAPER_SKIP_DIRECT: "1"
         run: npm run scrape
 
       - name: Notify (Gist + Discord)

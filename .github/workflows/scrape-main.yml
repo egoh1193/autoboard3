@@ -1,0 +1,86 @@
+name: Scrape and notify (main threads)
+
+# メインスレ(directThreads)専用の軽量バッチ(系統②の分割)。
+# 地域別巡回(scrape.yml)と分離して高頻度で起動することで、メインスレへの
+# 新着レスの検知を速くすることを目的とする(地域別スレは scrape.yml が担当)。
+#
+# - SCRAPER_DIRECT_ONLY=1 を渡すため、キーワード検索・一覧巡回は行わず
+#   設定 gist の directThreads だけを取得する(directThreads 未設定なら何もせず正常終了)
+# - 通知は scrape.yml と同じく「秘密 gist に全文投稿 → Discord に URL だけ通知」
+# - 新着判定の状態は scrape.yml とは**別キャッシュキー**(scrape-main-state-v1-)
+#   で引き継ぐ。両 workflow が同じスレを二重に通知しないよう、地域別側
+#   (scrape.yml)は SCRAPER_SKIP_DIRECT=1 で直接指定スレをスキップしている
+# - 実行統計は Actions ログでのみ確認する(件数のみ。log/latest-run.md には
+#   書かない。複数 workflow が同じファイルを更新すると競合するため)
+# - GitHub Actions の schedule は間引きされることがあるため、この cron でも
+#   起動がスキップされる場合がある(30 分以内の検知は保証されない)
+
+on:
+  schedule:
+    # 10 分おき(:00 / :30 を避けて 2 分ずらす)。実際の起動は GitHub 側で
+    # 間引される可能性がある
+    - cron: "2-59/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scrape-and-notify-main
+  cancel-in-progress: false
+
+jobs:
+  scrape-and-notify-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore scraper config
+        env:
+          SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
+        run: |
+          if [ -n "$SCRAPER_CONFIG" ]; then
+            printf '%s' "$SCRAPER_CONFIG" > scraper/config.json
+            echo "scraper/config.json をシークレットから復元しました"
+          else
+            echo "SCRAPER_CONFIG が未設定のため、モックモードで実行します"
+          fi
+
+      - name: Restore new-thread detection state
+        uses: actions/cache/restore@v5
+        with:
+          path: .scrape-state.json
+          key: scrape-main-state-v1-${{ github.run_id }}
+          restore-keys: scrape-main-state-v1-
+
+      - name: Scrape main threads
+        env:
+          SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
+          # 巡回設定 gist(directThreads は gist の JSON から読む)
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
+          # 設定 gist が秘密 gist の場合に必要(gist 権限の PAT)
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          # 直接指定スレ(directThreads)のみを巡回するモード
+          SCRAPER_DIRECT_ONLY: "1"
+        run: npm run scrape
+
+      - name: Notify (Gist + Discord)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: npm run notify
+
+      - name: Save new-thread detection state
+        # DISCORD_WEBHOOK_URL / GIST_TOKEN 未登録時は notify が状態を更新しないため
+        # ファイルが存在しない。actions/cache/save は存在しないパスで失敗するため、
+        # 存在するときだけ保存する
+        if: ${{ hashFiles('.scrape-state.json') != '' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .scrape-state.json
+          key: scrape-main-state-v1-${{ github.run_id }}
