@@ -10,7 +10,7 @@
     "post": "node --env-file-if-exists=.env poster/index.mjs",
     "batch": "npm run scrape && npm run notify && npm run post",
     "dev": "sh -c 'if [ -f .env ]; then npx wrangler dev --env-file .env --port 9000; else npx wrangler dev --port 9000; fi'",
-    "setup": "sh -c 'echo \"$GH_TOKEN\" | gh auth login --with-token && gh auth setup-git && git config user.name \"egoh_1193\" && git config user.email \"egoh_1193@users.noreply.github.com\" && ([ -d node_modules ] || npm install)'",
+    "setup": "sh -c 'if [ -z \"$GH_TOKEN\" ]; then echo \"GH_TOKEN が未設定です(docker run -e GH_TOKEN=... で渡してください)\"; exit 1; fi; if command -v gh >/dev/null 2>&1; then echo \"$GH_TOKEN\" | gh auth login --with-token && gh auth setup-git; else git config credential.helper \"!f(){ echo username=x-access-token; echo password=\\$GH_TOKEN; }; f\"; echo \"gh が無いため git の credential.helper で認証します(イメージ再ビルドで gh が使えます)\"; fi; git config user.name \"egoh_1193\" && git config user.email \"egoh_1193@users.noreply.github.com\" && ([ -d node_modules ] || npm install)'",
     "deploy": "npx wrangler deploy",
     "gh-action-test": "npm run batch"
   },
