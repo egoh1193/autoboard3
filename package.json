@@ -9,7 +9,7 @@
     "notify": "node --env-file-if-exists=.env scraper/notify.mjs",
     "post": "node --env-file-if-exists=.env poster/index.mjs",
     "batch": "npm run scrape && npm run notify && npm run post",
-    "dev": "sh -c 'if [ -f .env ]; then npx wrangler dev --env-file .env; else npx wrangler dev; fi'",
+    "dev": "sh -c 'if [ -f .env ]; then npx wrangler dev --env-file .env --port 9000; else npx wrangler dev --port 9000; fi'",
     "deploy": "npx wrangler deploy",
     "gh-action-test": "npm run batch"
   },
