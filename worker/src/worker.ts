@@ -7,10 +7,19 @@ import { loadConfig, scrapeThreads, type Env, type ScrapeResult, type ThreadData
 
 const CACHE_KEY = new Request("https://internal.board-mirror/scrape-result");
 
+// 限定公開: 全レスポンスに noindex を付け、検索エンジンに収集されないようにする
+// (robots.txt の Disallow は未収集のクローラーにのみ効く。既に URL を知っている
+//  クローラー向けに X-Robots-Tag / meta robots で noindex を重ねがけする)
+const ROBOTS_HEADERS: Record<string, string> = { "X-Robots-Tag": "noindex, nofollow" };
+
 const jsonResponse = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...ROBOTS_HEADERS,
+    },
   });
 
 // スクレイピング結果を Cache API(cacheTtlSec 秒)で共有する。
@@ -70,6 +79,12 @@ export default {
         );
       }
     }
-    return env.ASSETS.fetch(request);
+    // 静的アセット(robots.txt / HTML / JS / CSS)にも noindex ヘッダを付けて返す
+    const res = await env.ASSETS.fetch(request);
+    const headers = new Headers(res.headers);
+    for (const [key, value] of Object.entries(ROBOTS_HEADERS)) {
+      headers.set(key, value);
+    }
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 };

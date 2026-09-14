@@ -122,6 +122,7 @@ worker/     Cloudflare Worker(アクセス時リアルタイム取得)
 
 ## 備考
 
+- **限定公開**: `site/robots.txt`(全クロール拒否)+ 全レスポンスの `X-Robots-Tag: noindex, nofollow` + HTML の `meta robots` で検索エンジンへの登録を拒否している(URL を知る人だけがアクセスできる)。実アクセス制限が必要な場合は Cloudflare Access や Basic 認証の追加を検討
 - フロントエンド(`site/app.js`)は取得本文を `textContent` でのみ描画するため、スクレイピング元 HTML にスクリプトが含まれていても実行されない
 - カスタムドメインは Cloudflare ダッシュボードの Worker「設定 → ドメインとルート」から追加
 - 通知間隔は `.github/workflows/scrape.yml` の `cron` で変更(GitHub Actions の cron は数分遅延する)
