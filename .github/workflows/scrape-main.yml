@@ -76,6 +76,9 @@ jobs:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           # ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンクを併記
           MIRROR_URL: ${{ secrets.MIRROR_URL }}
+          # この実行がメインスレ専用であることを notify に伝える
+          # (Discord の見出しが「メインスレの更新がありました。」になる)
+          SCRAPER_DIRECT_ONLY: "1"
         run: npm run notify
 
       - name: Save new-thread detection state

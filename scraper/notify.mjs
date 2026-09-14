@@ -176,9 +176,12 @@ async function createGist(token, apiUrl, filename, description, content) {
 }
 
 // Discord に投稿する短いメッセージ(本文・スレタイは載せず gist URL のみ)。
-// 詳細はすべて gist 側に任せる
+// 詳細はすべて gist 側に任せる。
+// メインスレ専用実行(SCRAPER_DIRECT_ONLY=1・scrape-main.yml)のときは
+// 見出しに「メインスレ」を付けて地域別巡回と区別する
 function buildDiscordMessage(gistUrl) {
-  return `更新がありました。\n${gistUrl}`;
+  const label = process.env.SCRAPER_DIRECT_ONLY === "1" ? "メインスレ" : "";
+  return `${label ? label + "の" : ""}更新がありました。\n${gistUrl}`;
 }
 
 async function postToDiscord(webhookUrl, content) {
