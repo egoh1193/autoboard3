@@ -173,3 +173,30 @@ footer {
   color: var(--muted);
   font-size: 0.75rem;
 }
+/* キーワード絞り込み(?area=)中表示 */
+.filter-info {
+  margin: 8px 0 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.filter-info a {
+  margin-left: 8px;
+}
+
+/* メインスレ(一覧の下の固定リンク) */
+#main-threads {
+  margin-top: 28px;
+}
+
+#main-threads h2 {
+  font-size: 0.95rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.main-thread-table {
+  border: none;
+}

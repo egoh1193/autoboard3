@@ -41,6 +41,8 @@ export interface ThreadData extends ThreadMeta {
 export interface ScrapeResult {
   generatedAt: string;
   threads: ThreadMeta[];
+  // メインスレ(directThreads)。一覧(threads)とは別に、フロントの下部リンクとして表示する
+  mainThreads: ThreadMeta[];
   details: Record<string, ThreadData>;
 }
 
@@ -81,6 +83,10 @@ export interface BoardConfig {
     mailPage?: { linkPattern?: string; emailPattern?: string };
   };
   site?: { cacheTtlSec?: number; maxDetailThreads?: number; maxThreadPages?: number };
+  // メインスレ(directThreads)。要素は URL 文字列 or {url, title}。
+  // バッチとは異なり Worker は一覧を経由せず、ここで指定されたスレだけを
+  // 一覧とは別に(mainThreads として)取得する。タイトルフィルタは適用しない
+  directThreads?: (string | { url: string; title?: string; newestFirst?: boolean; maxPages?: number; maxAgeDays?: number })[];
 }
 
 export interface Env {
@@ -93,6 +99,9 @@ export interface Env {
   SCRAPER_DOMAIN?: string;
   // 性別排除キーワード(カンマ区切り、部分一致)。
   SCRAPER_SEX_EXCLUDES?: string;
+  // メインスレ(directThreads)の JSON 配列。デプロイ時に設定 gist から抽出され
+  // 同期される(deploy.yml)。未設定ならメインスレは取得しない
+  SCRAPER_DIRECT_THREADS?: string;
 }
 
 export function loadConfig(env: Env): BoardConfig {
@@ -117,6 +126,18 @@ export function loadConfig(env: Env): BoardConfig {
     .filter(Boolean);
   if (sexExcludes.length > 0) {
     config = { ...config, filters: { ...config.filters, sexExcludes } };
+  }
+  const directRaw = env.SCRAPER_DIRECT_THREADS?.trim();
+  if (directRaw) {
+    try {
+      const parsed = JSON.parse(directRaw);
+      if (Array.isArray(parsed)) {
+        config = { ...config, directThreads: parsed };
+      }
+    } catch (err) {
+      // 形式が不正な場合は無視する(メインスレなしで継続)
+      console.error(`[worker] SCRAPER_DIRECT_THREADS の解釈に失敗: ${err}`);
+    }
   }
   return config;
 }
@@ -192,57 +213,107 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
   const details: Record<string, ThreadData> = {};
   const targets = threads.slice(0, config.site?.maxDetailThreads ?? 20);
   const maxThreadPages = Math.min(config.thread?.maxPages ?? 1, config.site?.maxThreadPages ?? 2);
+
+  // 1 スレ分の本文を取得する(レス番号順ソートと updatedAt の算出まで行う)。
+  // メインスレ(directThreads)でも同じ関数を使う
+  const collectThread = async (thread: ThreadMeta): Promise<Post[]> => {
+    let pageUrl: string | null = thread.url;
+    let title = "";
+    const seenNums = new Set<number>();
+    const posts: Post[] = [];
+    for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
+      const html = await getHtml(pageUrl, mockThreadHtml);
+      const parsed = parseThread(html, config.thread) as {
+        title: string;
+        posts: Post[];
+      };
+      if (page === 1) {
+        title = parsed.title;
+      }
+      // ページ送りで重複したレス(モックで全ページ同じファイルなど)と
+      // 性別排除キーワードに該当するレスは除外
+      for (const post of parsed.posts) {
+        if (seenNums.has(post.num) || isSexExcluded(post, config.filters)) {
+          continue;
+        }
+        seenNums.add(post.num);
+        posts.push(post);
+      }
+      const nextHref = parseNextPageUrl(html, config.thread);
+      pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : null;
+    }
+    // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
+    if (title && !mock) {
+      thread.title = title;
+    }
+    // ページは p=1(最新)から古い側へ取得するため、レス番号順に並べ直す
+    // (ページ順のままだとスレ上部に古いレスが来て「最新が古い」ように見える)
+    posts.sort((a, b) => a.num - b.num);
+    // 最終更新日時 = レス日時の最大値(表示順とは無関係に実レスから算出)
+    let updatedAt: string | undefined;
+    for (const post of posts) {
+      if (!post.date) continue;
+      if (!updatedAt || parsePostDateMs(post.date) > parsePostDateMs(updatedAt)) {
+        updatedAt = post.date;
+      }
+    }
+    if (updatedAt) thread.updatedAt = updatedAt;
+    return posts;
+  };
+
+  const buildDetail = (thread: ThreadMeta, posts: Post[]): ThreadData => ({
+    ...thread,
+    // resCount は一覧の実件数(#672 など)を優先(取得レス数で上書きしない)
+    resCount: thread.resCount || posts.length,
+    posts,
+  });
+
   await Promise.all(
     targets.map(async (thread) => {
-      let pageUrl: string | null = thread.url;
-      let title = "";
-      const seenNums = new Set<number>();
-      const posts: Post[] = [];
-      for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
-        const html = await getHtml(pageUrl, mockThreadHtml);
-        const parsed = parseThread(html, config.thread) as {
-          title: string;
-          posts: Post[];
-        };
-        if (page === 1) {
-          title = parsed.title;
-        }
-        // ページ送りで重複したレス(モックで全ページ同じファイルなど)と
-        // 性別排除キーワードに該当するレスは除外
-        for (const post of parsed.posts) {
-          if (seenNums.has(post.num) || isSexExcluded(post, config.filters)) {
-            continue;
-          }
-          seenNums.add(post.num);
-          posts.push(post);
-        }
-        const nextHref = parseNextPageUrl(html, config.thread);
-        pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : null;
-      }
-      // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
-      if (title && !mock) {
-        thread.title = title;
-      }
-      // ページは p=1(最新)から古い側へ取得するため、レス番号順に並べ直す
-      // (ページ順のままだとスレ上部に古いレスが来て「最新が古い」ように見える)
-      posts.sort((a, b) => a.num - b.num);
-      // 最終更新日時 = レス日時の最大値(表示順とは無関係に実レスから算出)
-      let updatedAt: string | undefined;
-      for (const post of posts) {
-        if (!post.date) continue;
-        if (!updatedAt || parsePostDateMs(post.date) > parsePostDateMs(updatedAt)) {
-          updatedAt = post.date;
-        }
-      }
-      if (updatedAt) thread.updatedAt = updatedAt;
-      // resCount は一覧の実件数(#672 など)を優先(取得レス数で上書きしない)
-      details[thread.id] = {
-        ...thread,
-        resCount: thread.resCount || posts.length,
-        posts,
-      };
+      details[thread.id] = buildDetail(thread, await collectThread(thread));
     }),
   );
+
+  // 5. メインスレ(directThreads)。一覧とは別に mainThreads として返す
+  // (フロントの一覧下部に「メインスレ」リンクとして表示する)。
+  // タイトルフィルタは適用しない(明示指定)。一覧と ID 重複時は取得済み詳細を流用
+  const mainThreads: ThreadMeta[] = [];
+  const directList = config.directThreads ?? [];
+  if (directList.length > 0) {
+    // サブリクエスト上限(無料プラン 50)対策: 一覧・詳細取得の残り予算で頭打ち
+    const listRequests = mock ? 1 : Math.max(1, config.threadList?.maxPages ?? 1);
+    const budget = Math.max(
+      0,
+      Math.floor((48 - listRequests - targets.length * maxThreadPages) / Math.max(maxThreadPages, 1)),
+    );
+    const mains = directList.slice(0, budget);
+    await Promise.all(
+      mains.map(async (entry) => {
+        const spec = typeof entry === "string" ? { url: entry } : entry;
+        const url = resolveUrl(spec.url, config.targetUrl);
+        const id = threadIdFromUrl(url);
+        if (!id) return;
+        const existing = details[id];
+        if (existing) {
+          // 一覧由来と同じスレ → 取得済みの詳細をそのまま使う
+          mainThreads.push({ ...existing, category: "メインスレ" });
+          return;
+        }
+        const meta: ThreadMeta = {
+          id,
+          title: spec.title || "",
+          url,
+          category: "メインスレ",
+          resCount: 0,
+          createdAt: "",
+        };
+        const posts = await collectThread(meta);
+        const detail = buildDetail(meta, posts);
+        details[id] = detail;
+        mainThreads.push({ ...detail });
+      }),
+    );
+  }
 
   // 一覧は最終更新日時の新しい順に並べ替える(実サイトの最新更新順に合わせる)。
   // 日時が取れないスレは元の順序を保つ
@@ -254,6 +325,7 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
   return {
     generatedAt: new Date().toISOString(),
     threads: sortedThreads,
+    mainThreads,
     details,
   };
 }

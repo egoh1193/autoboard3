@@ -87,3 +87,51 @@ jobs:
           if [ -z "$SCRAPER_CONFIG" ] && [ -z "$SCRAPER_DOMAIN" ]; then
             echo "::warning::SCRAPER_CONFIG / SCRAPER_DOMAIN どちらも未設定のため、Worker はモックモードで動作します"
           fi
+
+      - name: Sync main threads (directThreads) to Worker secret
+        # 設定 gist の JSON から directThreads(メインスレ)だけを抽出して
+        # Worker secret SCRAPER_DIRECT_THREADS に同期する。Worker は一覧とは別の
+        # 「メインスレ」リンクとして取得・表示する(系統③ の投稿先スレなど)。
+        # gist URL・ID・内容・スレタイはログに出さない(件数のみ)
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
+          GIST_API_URL: ${{ vars.GIST_API_URL || '' }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$SCRAPER_SETTINGS_GIST_URL" ]; then
+            echo "設定 gist(SCRAPER_SETTINGS_GIST_URL)未設定のためメインスレの同期をスキップします"
+            exit 0
+          fi
+          node -e '
+            (async () => {
+              const raw = process.env.SCRAPER_SETTINGS_GIST_URL ?? "";
+              const trimmed = raw.trim();
+              let id = trimmed;
+              if (trimmed.includes("://")) {
+                try {
+                  const u = new URL(trimmed);
+                  const parts = u.pathname.split("/").filter(Boolean);
+                  id = u.hostname === "gist.githubusercontent.com" ? (parts[1] ?? "") : (parts[parts.length - 1] ?? "");
+                } catch { id = ""; }
+              }
+              if (!id) { require("fs").writeFileSync("/tmp/direct-threads.json", "[]"); console.log("設定 gist の URL を解釈できず空配列で同期します"); process.exit(0); }
+              const headers = { Accept: "application/vnd.github+json", "User-Agent": "board-mirror-deploy" };
+              if (process.env.GIST_TOKEN) headers.Authorization = `Bearer ${process.env.GIST_TOKEN}`;
+              const base = (process.env.GIST_API_URL || "https://api.github.com/gists").replace(/\/$/, "");
+              const res = await fetch(`${base}/${id}`, { headers });
+              if (!res.ok) { console.error(`設定 gist の取得に失敗しました (HTTP ${res.status})`); process.exit(1); }
+              const data = await res.json();
+              const jsonFile = Object.values(data.files ?? {}).find((f) => typeof f?.content === "string" && f?.filename?.endsWith(".json"));
+              if (!jsonFile) { require("fs").writeFileSync("/tmp/direct-threads.json", "[]"); console.log("設定 gist に JSON がないためメインスレなしで同期します"); process.exit(0); }
+              const parsed = JSON.parse(jsonFile.content);
+              const dt = Array.isArray(parsed.directThreads) ? parsed.directThreads : [];
+              require("fs").writeFileSync("/tmp/direct-threads.json", JSON.stringify(dt));
+              console.log(`directThreads を抽出しました(件数 ${dt.length})`);
+            })();
+          '
+          printf '%s' "$(cat /tmp/direct-threads.json)" | npx wrangler secret put SCRAPER_DIRECT_THREADS
+          echo "Worker secret SCRAPER_DIRECT_THREADS を更新しました"
+          rm -f /tmp/direct-threads.json

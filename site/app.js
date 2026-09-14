@@ -25,52 +25,114 @@ function formatGeneratedAt(iso) {
   return `最終更新: ${d.toLocaleString("ja-JP")}`;
 }
 
+// URL の ?area=神田,上野,浅草 をタイトル絞り込みキーワードとして読む。
+// カンマ(半角/全角)区切りで、いずれか 1 つでもタイトルに含まれていれば表示(OR)
+function readAreaFilter() {
+  const raw = new URLSearchParams(location.search).get("area");
+  if (!raw) return [];
+  return raw
+    .split(/[,,]/)
+    .map((kw) => kw.trim())
+    .filter(Boolean);
+}
+
+function showAreaFilter(keywords, shown, total) {
+  const info = $("#filter-info");
+  if (!info) return;
+  if (keywords.length === 0) {
+    info.hidden = true;
+    info.textContent = "";
+    return;
+  }
+  const clear = document.createElement("a");
+  clear.href = "/";
+  clear.textContent = "絞り込み解除";
+  info.textContent = `絞り込み中: ${keywords.join("・")}(該当 ${shown}/${total} 件) — `;
+  info.append(clear);
+  info.hidden = false;
+}
+
+function buildThreadRow(t) {
+  const tr = document.createElement("tr");
+
+  const tdTitle = document.createElement("td");
+  tdTitle.className = "col-title";
+  const a = document.createElement("a");
+  a.href = `/thread?id=${encodeURIComponent(t.id)}`;
+  a.textContent = t.title || "(タイトルなし)";
+  tdTitle.append(a);
+  if (t.category) {
+    const cat = document.createElement("span");
+    cat.className = "category-tag";
+    cat.textContent = t.category;
+    tdTitle.append(cat);
+  }
+
+  const tdCount = document.createElement("td");
+  tdCount.className = "col-count";
+  tdCount.textContent = String(t.resCount);
+
+  const tdUpdated = document.createElement("td");
+  tdUpdated.className = "col-updated";
+  tdUpdated.textContent = t.updatedAt || t.createdAt || "";
+
+  tr.append(tdTitle, tdCount, tdUpdated);
+  return tr;
+}
+
+// 一覧(キーワード絞り込み適用)を描画する
+function renderThreadRows(threads, keywords) {
+  const tbody = $("#thread-rows");
+  tbody.textContent = "";
+
+  const filtered = keywords.length
+    ? threads.filter((t) => keywords.some((kw) => t.title.includes(kw)))
+    : threads;
+
+  if (filtered.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.className = "loading";
+    td.textContent = keywords.length
+      ? "絞り込み条件に一致するスレッドがありません。"
+      : "スレッドがありません。";
+    tr.append(td);
+    tbody.append(tr);
+  } else {
+    for (const t of filtered) {
+      tbody.append(buildThreadRow(t));
+    }
+  }
+  return filtered.length;
+}
+
+// メインスレ(directThreads)。一覧の下に固定リンクとして表示する
+// (絞り込み中でも常に表示する)
+function renderMainThreads(mainThreads) {
+  const section = $("#main-threads");
+  if (!section) return;
+  const tbody = $("#main-thread-rows");
+  tbody.textContent = "";
+  if (!mainThreads || mainThreads.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  for (const t of mainThreads) {
+    tbody.append(buildThreadRow(t));
+  }
+  section.hidden = false;
+}
+
 function renderList() {
+  const keywords = readAreaFilter();
   fetchJson("/data/threads.json")
     .then((data) => {
       $("#generated-at").textContent = formatGeneratedAt(data.generatedAt);
 
-      const tbody = $("#thread-rows");
-      tbody.textContent = "";
-
-      if (data.threads.length === 0) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 3;
-        td.className = "loading";
-        td.textContent = "スレッドがありません。";
-        tr.append(td);
-        tbody.append(tr);
-        return;
-      }
-
-      for (const t of data.threads) {
-        const tr = document.createElement("tr");
-
-        const tdTitle = document.createElement("td");
-        tdTitle.className = "col-title";
-        const a = document.createElement("a");
-        a.href = `/thread?id=${encodeURIComponent(t.id)}`;
-        a.textContent = t.title || "(タイトルなし)";
-        tdTitle.append(a);
-        if (t.category) {
-          const cat = document.createElement("span");
-          cat.className = "category-tag";
-          cat.textContent = t.category;
-          tdTitle.append(cat);
-        }
-
-        const tdCount = document.createElement("td");
-        tdCount.className = "col-count";
-        tdCount.textContent = String(t.resCount);
-
-        const tdCreated = document.createElement("td");
-        tdCreated.className = "col-updated";
-        tdCreated.textContent = t.updatedAt || t.createdAt || "";
-
-        tr.append(tdTitle, tdCount, tdCreated);
-        tbody.append(tr);
-      }
+      const shown = renderThreadRows(data.threads || [], keywords);
+      showAreaFilter(keywords, shown, (data.threads || []).length);
+      renderMainThreads(data.mainThreads);
     })
     .catch((err) => {
       showError(`スレッド一覧の読み込みに失敗しました: ${err.message}`);

@@ -50,7 +50,11 @@ async function handleData(pathname: string, env: Env, waitUntil: (p: Promise<unk
   const result = await getScrapeResult(env, waitUntil);
 
   if (pathname === "/data/threads.json") {
-    return jsonResponse({ generatedAt: result.generatedAt, threads: result.threads });
+    return jsonResponse({
+      generatedAt: result.generatedAt,
+      threads: result.threads,
+      mainThreads: result.mainThreads,
+    });
   }
 
   // /data/threads/<id>.json

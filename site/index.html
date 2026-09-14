@@ -15,6 +15,9 @@
   </header>
 
   <main>
+    <!-- ?area=神田,上野 などで絞り込んだときに表示 -->
+    <p id="filter-info" class="filter-info" hidden></p>
+
     <table class="thread-table">
       <thead>
         <tr>
@@ -29,6 +32,15 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- メインスレ(directThreads)。一覧とは別に固定リンクとして表示 -->
+    <section id="main-threads" hidden>
+      <h2>メインスレ</h2>
+      <table class="thread-table main-thread-table">
+        <tbody id="main-thread-rows"></tbody>
+      </table>
+    </section>
+
     <p id="error" class="error" hidden></p>
   </main>
 
