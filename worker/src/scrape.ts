@@ -87,6 +87,8 @@ export interface BoardConfig {
   // バッチとは異なり Worker は一覧を経由せず、ここで指定されたスレだけを
   // 一覧とは別に(mainThreads として)取得する。タイトルフィルタは適用しない
   directThreads?: (string | { url: string; title?: string; newestFirst?: boolean; maxPages?: number; maxAgeDays?: number })[];
+  // /map 機能用の「地名 → 緯度経度」対応表(scraper/map.mjs が照合に使う)
+  map?: { places: { match: string; lat: number; lng: number; label?: string }[] };
 }
 
 export interface Env {

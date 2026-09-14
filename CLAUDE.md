@@ -95,6 +95,7 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 - Workers のサブリクエスト上限(無料プラン 50)対策で、本文取得は `site.maxDetailThreads`(既定 20)スレ × `site.maxThreadPages`(既定 2)ページで頭打ち・並列取得。バッチ側は `thread.maxPages` まで全ページ取得でき、礼儀正しさ(リクエスト間隔・指数バックオフリトライ)もバッチ側にのみある
 - Worker は `env.SCRAPER_CONFIG`(secret)を config.example.json の既定値にマージして使う。モック HTML は `scraper/mock/*.html` を wrangler の Text ルールで文字列 import
 - **モックモードでは全スレが同じサンプル本文を共有するため、本文側のタイトルで一覧タイトルを上書きしない**(index.mjs / scrape.ts 両方に同じ条件がある)
+- **/map ページ**(site/map.html + app.js の `renderMap()`): 投稿を地図ピン + 吹き出し(Leaflet + OSM)で表示。`/data/map.json` が既存キャッシュのスクレイプ結果から `config.map.places`(「地名 → 緯度経度」対応表。照合順: レスの地域メタ `area` → 本文 → スレタイの部分一致)に一致した投稿をピン化して返す(`scraper/map.mjs` 共有、バッチの site/data 出力も同じ基準で lat/lng を付与)。ピン色は性別(ピンク=女/ブルー=男/グレー=不明)。**一致しない地名の投稿は地図に載らない**。吹き出しも本文と同じく textContent 描画(innerHTML 禁止)
 
 ### 系統③ 自動投稿(poster/index.mjs — Playwright)
 

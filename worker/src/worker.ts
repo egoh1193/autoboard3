@@ -4,6 +4,8 @@
 // Discord 通知(系統②)は GitHub Actions 側(scraper/notify.mjs)が担う。
 
 import { loadConfig, scrapeThreads, type Env, type ScrapeResult, type ThreadData } from "./scrape";
+// @ts-expect-error -- JS モジュール(型定義なし、esbuild でバンドルされる)
+import { excerptFromBody, pinForPost } from "../../scraper/map.mjs";
 
 const CACHE_KEY = new Request("https://internal.board-mirror/scrape-result");
 
@@ -57,6 +59,33 @@ async function handleData(pathname: string, env: Env, waitUntil: (p: Promise<unk
     });
   }
 
+  // /map 用のピンデータ。既存のスクレイプ結果(キャッシュ済み)から
+  // 地名対応表(config.map.places)に一致した投稿だけをピン化する
+  if (pathname === "/data/map.json") {
+    const config = loadConfig(env);
+    const pins = Object.values(result.details).flatMap((thread) =>
+      thread.posts.flatMap((post) => {
+        const pin = pinForPost(post, thread, config);
+        if (!pin) return [];
+        return [
+          {
+            threadId: thread.id,
+            threadTitle: thread.title,
+            num: post.num,
+            name: post.name || "名無しさん",
+            age: post.age ?? "",
+            sex: post.sex ?? "",
+            area: post.area ?? "",
+            body: excerptFromBody(post.body),
+            lat: pin.lat,
+            lng: pin.lng,
+          },
+        ];
+      }),
+    );
+    return jsonResponse({ generatedAt: result.generatedAt, pins });
+  }
+
   // /data/threads/<id>.json
   const id = decodeURIComponent(pathname.slice("/data/threads/".length).replace(/\.json$/, ""));
   const detail: ThreadData | undefined = result.details[id];
@@ -71,6 +100,7 @@ export default {
     const { pathname } = new URL(request.url);
     if (
       pathname === "/data/threads.json" ||
+      pathname === "/data/map.json" ||
       (pathname.startsWith("/data/threads/") && pathname.endsWith(".json"))
     ) {
       try {

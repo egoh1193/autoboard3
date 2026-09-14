@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>掲示板ミラー - 地図</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body data-page="map">
+  <header>
+    <p class="breadcrumb"><a href="/">← スレッド一覧へ</a></p>
+    <h1>地図</h1>
+    <p id="generated-at" class="generated-at"></p>
+  </header>
+
+  <main>
+    <div id="map"></div>
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <footer>
+    <p>投稿の地域情報と地名対応表(config.map)をもとにピンを配置しています。地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors。</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -171,6 +171,8 @@ function renderThread() {
       for (const post of thread.posts) {
         const article = document.createElement("article");
         article.className = "post";
+        // /map の吹き出しからのリンク(/thread?id=…#post-NN)用のアンカー
+        article.id = `post-${post.num}`;
 
         const header = document.createElement("div");
         header.className = "post-header";
@@ -245,9 +247,90 @@ function renderThread() {
     });
 }
 
+// /map: 投稿を地図ピン + 吹き出しで表示する。
+// ピン座標は Worker 側(scraper/map.mjs の地名対応表)が計算済み。
+// 吹き出しも本文と同じく textContent で描画する(innerHTML 禁止)
+function sexClass(sex) {
+  const s = String(sex || "");
+  if (s.includes("女")) return "pin-female";
+  if (s.includes("男")) return "pin-male";
+  return "pin-unknown";
+}
+
+function buildPopup(pin) {
+  const box = document.createElement("div");
+  box.className = "map-popup";
+
+  const title = document.createElement("p");
+  title.className = "map-popup-name";
+  title.textContent = pin.name;
+  box.append(title);
+
+  const meta = [pin.age, pin.sex, pin.place].filter(Boolean).join(" ・ ");
+  if (meta) {
+    const metaEl = document.createElement("p");
+    metaEl.className = "map-popup-meta";
+    metaEl.textContent = meta;
+    box.append(metaEl);
+  }
+
+  if (pin.body) {
+    const body = document.createElement("p");
+    body.className = "map-popup-body";
+    body.textContent = pin.body;
+    box.append(body);
+  }
+
+  const link = document.createElement("a");
+  link.className = "map-popup-link";
+  link.href = `/thread?id=${encodeURIComponent(pin.threadId)}#post-${pin.num}`;
+  link.textContent = "このスレを開く";
+  box.append(link);
+  return box;
+}
+
+function renderMap() {
+  const map = L.map("map");
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  fetchJson("/data/map.json")
+    .then((data) => {
+      $("#generated-at").textContent = formatGeneratedAt(data.generatedAt);
+
+      if (!data.pins || data.pins.length === 0) {
+        showError("地図に表示できる投稿がありません。config.map の地名対応表を確認してください。");
+        return;
+      }
+
+      const bounds = L.latLngBounds([]);
+      for (const pin of data.pins) {
+        const marker = L.marker([pin.lat, pin.lng], {
+          icon: L.divIcon({
+            className: `map-pin ${sexClass(pin.sex)}`,
+            iconSize: [22, 30],
+            iconAnchor: [11, 30],
+            popupAnchor: [0, -26],
+            html: "",
+          }),
+        }).addTo(map);
+        marker.bindPopup(buildPopup(pin));
+        bounds.extend([pin.lat, pin.lng]);
+      }
+      map.fitBounds(bounds.pad(0.15));
+    })
+    .catch((err) => {
+      showError(`地図データの読み込みに失敗しました: ${err.message}`);
+    });
+}
+
 const page = document.body.dataset.page;
 if (page === "list") {
   renderList();
 } else if (page === "thread") {
   renderThread();
+} else if (page === "map") {
+  renderMap();
 }

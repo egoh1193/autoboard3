@@ -46,6 +46,7 @@ cp scraper/config.example.json scraper/config.json
 | `site.cacheTtlSec` | 系統①の Worker 側キャッシュ有効期限(既定 60 秒) |
 | `site.maxDetailThreads` | 系統①で本文を取得するスレッド数の上限(既定 20。Workers のサブリクエスト上限対策) |
 | `site.maxThreadPages` | 系統①でスレッド本文を辿るページ数の上限(既定 2。`thread.maxPages` との小さい方が有効) |
+| `map.places` | (オプション)/map ページ用の「地名 → 緯度経度」対応表。`{ "match": "梅田", "lat": 34.7024, "lng": 135.4959, "label": "梅田" }` の配列。投稿の地域メタ → 本文 → スレタイの順で部分一致したレスにピンを配置し、`/data/map.json` として配信する |
 
 `config.json` が存在しない場合や `MOCK=1` を指定した場合は**モックモード**(`scraper/mock/` のサンプル HTML)で動作し、実サイトに当てる前に全パイプラインを検証できる。
 

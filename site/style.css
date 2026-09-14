@@ -168,6 +168,95 @@ a:hover {
   margin-top: 16px;
 }
 
+/* --- 地図(/map) --- */
+
+/* Leaflet は全幅で見せるため main の幅制限を外す */
+body[data-page="map"] main {
+  max-width: none;
+  padding: 0;
+}
+
+#map {
+  height: calc(100vh - 220px);
+  min-height: 320px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+/* ピン(スマ友風の性別色分け)。Leaflet divIcon の中に CSS で描く */
+.map-pin {
+  position: relative;
+}
+
+.map-pin::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ffffff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.map-pin::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.map-pin.pin-female::before {
+  background: #f06292;
+}
+
+.map-pin.pin-male::before {
+  background: #4f7bd9;
+}
+
+.map-pin.pin-unknown::before {
+  background: #9e9e9e;
+}
+
+/* 吹き出し(ポップアップ) */
+.map-popup {
+  margin: 0;
+  min-width: 160px;
+  max-width: 240px;
+  word-break: break-word;
+}
+
+.map-popup p {
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
+.map-popup .map-popup-name {
+  font-weight: bold;
+  color: #117743;
+}
+
+.map-popup .map-popup-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.map-popup .map-popup-body {
+  font-size: 0.85rem;
+}
+
+.map-popup .map-popup-link {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+}
+
 footer {
   padding-bottom: 32px;
   color: var(--muted);

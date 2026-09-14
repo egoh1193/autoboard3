@@ -17,6 +17,12 @@
     "sexExcludes": []
   },
   "directThreads": [],
+  "map": {
+    "places": [
+      { "match": "梅田", "lat": 34.7024, "lng": 135.4959, "label": "梅田" },
+      { "match": "天王寺", "lat": 34.6566, "lng": 135.5063, "label": "天王寺" }
+    ]
+  },
   "site": {
     "cacheTtlSec": 60,
     "maxDetailThreads": 20,

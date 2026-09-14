@@ -36,6 +36,8 @@ import {
   resolveUrl,
   threadIdFromUrl,
 } from "./parse.mjs";
+// /map 機能用のピン計算(地名対応表 config.map から緯度経度を決める)
+import { pinForPost } from "./map.mjs";
 
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DATA_DIR = path.resolve(SCRAPER_DIR, "../site/data");
@@ -684,9 +686,15 @@ async function main() {
   );
   for (const { detail, ...meta } of threads) {
     if (!detail) continue;
+    // 各レスに /map 用のピン座標(地名対応表に一致した場合のみ)を付与。
+    // Worker の /data/map.json と同じ基準(scraper/map.mjs)
+    const posts = detail.posts.map((post) => {
+      const pin = pinForPost(post, meta, config);
+      return pin ? { ...post, ...pin } : post;
+    });
     await writeFile(
       path.join(SITE_DATA_DIR, "threads", `${meta.id}.json`),
-      JSON.stringify({ ...meta, posts: detail.posts }, null, 2),
+      JSON.stringify({ ...meta, posts }, null, 2),
     );
   }
 
