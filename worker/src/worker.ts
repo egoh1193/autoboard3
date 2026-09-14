@@ -123,8 +123,10 @@ export default {
   },
 
   // Cron トリガー(*/10)。GitHub Actions の schedule は高頻度 cron が間引かれる
-  // (実勢 2〜4 時間おき)ため、Cloudflare Cron から workflow_dispatch で
-  // scrape.yml(地域別巡回)を確実に起動する。トークンは Actions: Write 権限の PAT
+  // (scrape-main.yml は 10 分 cron でも実勢 1 日数回しか起きない)ため、
+  // Cloudflare Cron から workflow_dispatch で巡回ワークフローを確実に起動する。
+  // 対象は scrape.yml(地域別巡回)と scrape-main.yml(メインスレ専用)。
+  // トークンは Actions: Write 権限の PAT
   // (リポジトリシークレット GH_DISPATCH_TOKEN → deploy.yml が Worker secret に同期)。
   // 未設定なら何もしない(参照系のアクセスには影響しない)
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
@@ -134,21 +136,23 @@ export default {
       return;
     }
     const repo = env.GH_DISPATCH_REPO || "egoh1193/autoboard3";
-    const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/scrape.yml/dispatches`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "board-mirror-cron",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify({ ref: "main" }),
-    });
-    if (res.status === 204) {
-      console.log("[worker] cron: scrape.yml を dispatch しました");
-    } else {
-      // 失敗理由はステータスコードのみ(レスポンス本文のログ出力はしない)
-      console.error(`[worker] cron: dispatch 失敗 (HTTP ${res.status})`);
+    for (const workflow of ["scrape.yml", "scrape-main.yml"]) {
+      const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "board-mirror-cron",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({ ref: "main" }),
+      });
+      if (res.status === 204) {
+        console.log(`[worker] cron: ${workflow} を dispatch しました`);
+      } else {
+        // 失敗理由はステータスコードのみ(レスポンス本文のログ出力はしない)
+        console.error(`[worker] cron: ${workflow} の dispatch 失敗 (HTTP ${res.status})`);
+      }
     }
   },
 };
