@@ -65,8 +65,8 @@ function renderList() {
         tdCount.textContent = String(t.resCount);
 
         const tdCreated = document.createElement("td");
-        tdCreated.className = "col-created";
-        tdCreated.textContent = t.createdAt;
+        tdCreated.className = "col-updated";
+        tdCreated.textContent = t.updatedAt || t.createdAt || "";
 
         tr.append(tdTitle, tdCount, tdCreated);
         tbody.append(tr);
@@ -91,7 +91,7 @@ function renderThread() {
       $("#thread-meta").textContent = [
         thread.category ? `カテゴリ: ${thread.category}` : "",
         thread.resCount != null ? `レス数: ${thread.resCount}` : "",
-        thread.createdAt ? `作成: ${thread.createdAt}` : "",
+        thread.updatedAt ? `最終更新: ${thread.updatedAt}` : "",
       ]
         .filter(Boolean)
         .join(" ・ ");

@@ -18,7 +18,7 @@
   },
   "directThreads": [],
   "site": {
-    "cacheTtlSec": 300,
+    "cacheTtlSec": 60,
     "maxDetailThreads": 20,
     "maxThreadPages": 2
   },
@@ -32,7 +32,7 @@
       "resCount": "#(\\d+)"
     },
     "nextPage": "center a:contains('→')@href",
-    "maxPages": 2
+    "maxPages": 1
   },
   "thread": {
     "parser": "hr-split",

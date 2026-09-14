@@ -12,7 +12,7 @@ import mockThreadListHtml from "../../scraper/mock/sample-thread-list.html";
 import mockThreadHtml from "../../scraper/mock/sample-thread.html";
 import defaultConfigJson from "../../scraper/config.example.json";
 // @ts-expect-error -- JS モジュール(型定義なし、esbuild でバンドルされる)
-import { isMockConfig, isSexExcluded, matchesFilters, parseList, parseNextPageUrl, parseThread, resolveUrl, threadIdFromUrl } from "../../scraper/parse.mjs";
+import { isMockConfig, isSexExcluded, matchesFilters, parseList, parseNextPageUrl, parsePostDateMs, parseThread, resolveUrl, threadIdFromUrl } from "../../scraper/parse.mjs";
 
 export interface Post {
   num: number;
@@ -30,6 +30,8 @@ export interface ThreadMeta {
   category: string;
   resCount: number;
   createdAt: string;
+  // スレ内レス日時の最大値(最終更新日時)。詳細取得できたスレのみ入る
+  updatedAt?: string;
 }
 
 export interface ThreadData extends ThreadMeta {
@@ -221,13 +223,37 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
       if (title && !mock) {
         thread.title = title;
       }
-      details[thread.id] = { ...thread, resCount: posts.length, posts };
+      // ページは p=1(最新)から古い側へ取得するため、レス番号順に並べ直す
+      // (ページ順のままだとスレ上部に古いレスが来て「最新が古い」ように見える)
+      posts.sort((a, b) => a.num - b.num);
+      // 最終更新日時 = レス日時の最大値(表示順とは無関係に実レスから算出)
+      let updatedAt: string | undefined;
+      for (const post of posts) {
+        if (!post.date) continue;
+        if (!updatedAt || parsePostDateMs(post.date) > parsePostDateMs(updatedAt)) {
+          updatedAt = post.date;
+        }
+      }
+      if (updatedAt) thread.updatedAt = updatedAt;
+      // resCount は一覧の実件数(#672 など)を優先(取得レス数で上書きしない)
+      details[thread.id] = {
+        ...thread,
+        resCount: thread.resCount || posts.length,
+        posts,
+      };
     }),
   );
 
+  // 一覧は最終更新日時の新しい順に並べ替える(実サイトの最新更新順に合わせる)。
+  // 日時が取れないスレは元の順序を保つ
+  const sortedThreads = threads
+    .map((t, i) => ({ t, i, ms: t.updatedAt ? parsePostDateMs(t.updatedAt) : -1 }))
+    .sort((a, b) => (b.ms !== a.ms ? b.ms - a.ms : a.i - b.i))
+    .map((e) => e.t);
+
   return {
     generatedAt: new Date().toISOString(),
-    threads: threads.map((t) => ({ ...t, resCount: details[t.id]?.posts.length ?? t.resCount })),
+    threads: sortedThreads,
     details,
   };
 }

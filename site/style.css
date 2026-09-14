@@ -83,7 +83,7 @@ a:hover {
 }
 
 .col-count,
-.col-created {
+.col-updated {
   white-space: nowrap;
   color: var(--muted);
 }

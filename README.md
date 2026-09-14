@@ -43,7 +43,7 @@ cp scraper/config.example.json scraper/config.json
 | `thread.titleSelector` / `titleStrip` | 本文ページのスレタイ取得セレクタと、タイトルから除去する先頭パターン |
 | `thread.nextPage` / `maxPages` | スレッド本文の「次へ」リンク(例: `"center a:contains('→')@href"`)と最大取得ページ数 |
 | `thread.mailPage.linkPattern` / `emailPattern` | 個別ページ(メール送信ページ)からのメールアドレス抽出。本文ページの名前欄リンク URL を `linkPattern` で抽出し、その個別ページを取得して `emailPattern`(`mailto:`)でアドレスを取り出し、レスごとに `email` として保存する。**1 レス = 1 リクエストが必要なため系統②(バッチ)のみで実施**(系統①の Worker はサブリクエスト上限に収まらないためスキップ) |
-| `site.cacheTtlSec` | 系統①の Worker 側キャッシュ有効期限(既定 300 秒) |
+| `site.cacheTtlSec` | 系統①の Worker 側キャッシュ有効期限(既定 60 秒) |
 | `site.maxDetailThreads` | 系統①で本文を取得するスレッド数の上限(既定 20。Workers のサブリクエスト上限対策) |
 | `site.maxThreadPages` | 系統①でスレッド本文を辿るページ数の上限(既定 2。`thread.maxPages` との小さい方が有効) |
 
