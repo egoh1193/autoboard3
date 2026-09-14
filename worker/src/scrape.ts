@@ -253,9 +253,10 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
     if (title && !mock) {
       thread.title = title;
     }
-    // ページは p=1(最新)から古い側へ取得するため、レス番号順に並べ直す
-    // (ページ順のままだとスレ上部に古いレスが来て「最新が古い」ように見える)
-    posts.sort((a, b) => a.num - b.num);
+    // 元サイトのスレページと同じく、レス番号の新しい順(降順)で格納する。
+    // p=1 が最新ページ・ページ内も新しい順のため、実サイトの見た目と一致させる
+    // (昇順にすると「一番新しいレスが上に来ない」と感じるため 2026-09-14 に変更)
+    posts.sort((a, b) => b.num - a.num);
     // 最終更新日時 = レス日時の最大値(表示順とは無関係に実レスから算出)
     let updatedAt: string | undefined;
     for (const post of posts) {

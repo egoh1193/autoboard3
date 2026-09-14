@@ -90,7 +90,7 @@ Node バッチと Worker の**両方から import される**唯一のロジッ�
 ### 系統① worker/(アクセス時リアルタイム取得)
 
 - `worker/src/worker.ts`: ルーティング。`/data/*` の JSON のみ動的生成、それ以外は静的アセット(`site/`)へ。エラー時は 502 + JSON
-- `worker/src/scrape.ts`: 共有ライブラリで巡回し、`/data/threads.json` と `/data/threads/<id>.json` と同じ形式を組み立てる。スレ一覧は `threadList.maxPages`(既定 1)= 実サイトの最新 1 ページ分のみ。レスは**レス番号順にソート**して格納(p=1 が最新ページのためページ順のままだと古いレスが上に来る)。各スレに**最終更新日時 `updatedAt`**(レス日時の最大値)を付け、一覧はその新しい順に並べ替える。`resCount` は一覧の実件数(`#672` 等)を優先し取得レス数で上書きしない
+- `worker/src/scrape.ts`: 共有ライブラリで巡回し、`/data/threads.json` と `/data/threads/<id>.json` と同じ形式を組み立てる。スレ一覧は `threadList.maxPages`(既定 1)= 実サイトの最新 1 ページ分のみ。レスは**レス番号の新しい順(降順)にソート**して格納(元サイトのスレページと同じく最新レスが上。古→新の昇順にすると元サイトと見た目が逆になり 2026-09-14 に降順へ変更)。各スレに**最終更新日時 `updatedAt`**(レス日時の最大値)を付け、一覧はその新しい順に並べ替える。`resCount` は一覧の実件数(`#672` 等)を優先し取得レス数で上書きしない
 - 結果は Cache API で `site.cacheTtlSec`(既定 60 秒)キャッシュ。一覧・詳細で同一のスクレイプ結果を共有する
 - Workers のサブリクエスト上限(無料プラン 50)対策で、本文取得は `site.maxDetailThreads`(既定 20)スレ × `site.maxThreadPages`(既定 2)ページで頭打ち・並列取得。バッチ側は `thread.maxPages` まで全ページ取得でき、礼儀正しさ(リクエスト間隔・指数バックオフリトライ)もバッチ側にのみある
 - Worker は `env.SCRAPER_CONFIG`(secret)を config.example.json の既定値にマージして使う。モック HTML は `scraper/mock/*.html` を wrangler の Text ルールで文字列 import
