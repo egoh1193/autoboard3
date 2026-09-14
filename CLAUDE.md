@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## git の push・デプロイ(厳守)
+
+**`git push` は Claude から勝手に実行しない。push・デプロイはユーザーが自分で行う**(2026-09-14 指示)。コミットまではしてよい。コミットしたら「push をお願いします」と伝えて止まる。`git commit && git push` のような連鎖は組まない。`git fetch`・`gh` の参照系(読み取り)と、push 後に自動実行される `Deploy site` の結果確認(参照)はしてよい。
+
 ## ⚠️ ユーザー設定ファイルの取り扱い(厳守 — 違反すると実害が発生する)
 
 以下のファイルは**ユーザーが実環境の値を書き込むファイル**である。過去に(2026-09-05)Claude が動作検証中に `.env` を書き換え、ユーザーが入力済みのトークン類を消失させた実事故がある。
