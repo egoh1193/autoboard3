@@ -17,6 +17,27 @@
     "sexExcludes": []
   },
   "directThreads": [],
+  "threadConfigs": {
+    "panelBoard": {
+      "postsSelector": "div.panel-board",
+      "fields": {
+        "name": ".panel-head a@text",
+        "email": ".panel-head a[href^='mailto:']@href",
+        "date": ".panel-time@text",
+        "body": ".panel-mess@textbr"
+      },
+      "fieldPatterns": {
+        "area": "住所[：:]([^\\]]*)",
+        "age": "年齢[：:]([^\\]]*)",
+        "style": "ｽﾀｲﾙ[：:]([^\\]]*)",
+        "figure": "体型[：:]([^\\]]*)"
+      },
+      "imagesSpec": ".panel-image-item a@href",
+      "keySpec": ".panel-footer a@href",
+      "keyPattern": "/board/report/\\d+/([^/]+)/",
+      "nextPage": "ul.pagination li.page-item a@href"
+    }
+  },
   "map": {
     "places": [
       { "match": "梅田", "lat": 34.7024, "lng": 135.4959, "label": "梅田" },

@@ -72,6 +72,9 @@ async function handleData(pathname: string, env: Env, waitUntil: (p: Promise<unk
             threadId: thread.id,
             threadTitle: thread.title,
             num: post.num,
+            // 投稿 ID(post.key)。フロントの吹き出しリンク先アンカー
+            // (#post-…)の正体。レス番号のない板(サブ掲示板)ではこちらが主キー
+            key: post.key ?? "",
             name: post.name || "名無しさん",
             age: post.age ?? "",
             sex: post.sex ?? "",

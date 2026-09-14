@@ -10,17 +10,46 @@
 import mockCategoryHtml from "../../scraper/mock/sample.html";
 import mockThreadListHtml from "../../scraper/mock/sample-thread-list.html";
 import mockThreadHtml from "../../scraper/mock/sample-thread.html";
+import mockPanelBoardHtml from "../../scraper/mock/sample-panel-board.html";
 import defaultConfigJson from "../../scraper/config.example.json";
 // @ts-expect-error -- JS モジュール(型定義なし、esbuild でバンドルされる)
 import { isMockConfig, isSexExcluded, matchesFilters, parseList, parseNextPageUrl, parsePostDateMs, parseThread, resolveUrl, threadIdFromUrl } from "../../scraper/parse.mjs";
 
 export interface Post {
   num: number;
+  // 投稿 ID(通報・削除リンクの URL から取った掲示板固有の ID)。
+  // レス番号のない板(サブ掲示板の 1 枚板など)で重複排除・新着判定のキーに使う
+  key?: string;
   name?: string;
   date?: string;
   posterId?: string;
   body?: string;
   [key: string]: unknown;
+}
+
+// 板ごとのパーサ設定(config.thread と同型。directThreads 要素の thread が
+// 名前参照(threadConfigs)/インラインでこれを差し込める)
+export interface ThreadConfig {
+  parser?: string;
+  titleSelector?: string;
+  titleStrip?: string;
+  postsSelector?: string;
+  fields?: Record<string, string>;
+  fieldPatterns?: Record<string, string>;
+  imagesSpec?: string;
+  keySpec?: string;
+  keyPattern?: string;
+  nextPage?: string;
+  maxPages?: number;
+  post?: {
+    requireNumberSpan?: string;
+    numberPattern?: string;
+    namePattern?: string;
+    opPattern?: string;
+    datePattern?: string;
+    metaPatterns?: Record<string, string>;
+  };
+  mailPage?: { linkPattern?: string; emailPattern?: string };
 }
 
 export interface ThreadMeta {
@@ -62,31 +91,32 @@ export interface BoardConfig {
     nextPage?: string;
     maxPages?: number;
   };
-  thread?: {
-    parser?: string;
-    titleSelector?: string;
-    titleStrip?: string;
-    postsSelector?: string;
-    fields?: Record<string, string>;
-    post?: {
-      requireNumberSpan?: string;
-      numberPattern?: string;
-      namePattern?: string;
-      opPattern?: string;
-      datePattern?: string;
-      metaPatterns?: Record<string, string>;
-    };
-    nextPage?: string;
-    maxPages?: number;
-    // 個別ページ(メール送信ページ)設定。parse.mjs が mailUrl の抽出までを行うが、
-    // ページ取得(→ メールアドレス抽出)はサブリクエスト上限のためバッチ側のみ実施
-    mailPage?: { linkPattern?: string; emailPattern?: string };
-  };
+  // 共通のスレ本文パーサ設定(directThreads 要素に thread がないときに使う)
+  thread?: ThreadConfig;
   site?: { cacheTtlSec?: number; maxDetailThreads?: number; maxThreadPages?: number };
+  // 板ごとのパーサ設定(名前 → 設定)。directThreads 要素の thread で名前参照する
+  threadConfigs?: Record<string, ThreadConfig>;
   // メインスレ(directThreads)。要素は URL 文字列 or {url, title}。
   // バッチとは異なり Worker は一覧を経由せず、ここで指定されたスレだけを
   // 一覧とは別に(mainThreads として)取得する。タイトルフィルタは適用しない
-  directThreads?: (string | { url: string; title?: string; newestFirst?: boolean; maxPages?: number; maxAgeDays?: number })[];
+  // - id: スレ ID の明示指定(id クエリを持たない板ページ URL 向け)
+  // - mockFile: モックモード時の HTML ファイル名(mock/ 以下)
+  // - category: 一覧に表示するカテゴリ名(未指定は「メインスレ」)
+  // - thread: 板ごとのパーサ設定(名前 or インライン)。異なるエンジンの板を混在できる
+  directThreads?: (
+    | string
+    | {
+        url: string;
+        title?: string;
+        newestFirst?: boolean;
+        maxPages?: number;
+        maxAgeDays?: number;
+        id?: string;
+        mockFile?: string;
+        category?: string;
+        thread?: string | ThreadConfig;
+      }
+  )[];
   // /map 機能用の「地名 → 緯度経度」対応表(scraper/map.mjs が照合に使う)
   map?: { places: { match: string; lat: number; lng: number; label?: string }[] };
 }
@@ -159,6 +189,31 @@ async function fetchHtml(url: string, config: BoardConfig): Promise<string> {
   return res.text();
 }
 
+// モックモード時の HTML(板ごとに切り替えられる。wrangler の Text ルールで
+// scraper/mock/*.html が文字列として import される)
+const MOCK_FILES: Record<string, string> = {
+  "sample-thread.html": mockThreadHtml,
+  "sample-panel-board.html": mockPanelBoardHtml,
+};
+
+// directThreads 要素の thread(名前参照 or インライン)をパーサ設定に解決する。
+// 優先順: インライン > threadConfigs[名前] > 共通設定(config.thread)。未解決の
+// 名前は共通設定にフォールバックする(バッチ側と同じ挙動)
+function resolveThreadCfg(ref: string | ThreadConfig | undefined, config: BoardConfig): ThreadConfig {
+  if (ref === undefined || ref === null || ref === "") {
+    return config.thread ?? {};
+  }
+  if (typeof ref === "string") {
+    const named = config.threadConfigs?.[ref];
+    if (!named) {
+      console.error(`[worker] threadConfigs[${ref}] が見つからないため共通設定を使います`);
+      return config.thread ?? {};
+    }
+    return named;
+  }
+  return ref;
+}
+
 // 対象掲示板を一巡回してスレッド一覧と本文を取得する
 export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> {
   const mock = isMockConfig(config);
@@ -222,15 +277,24 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
   const maxThreadPages = Math.min(config.thread?.maxPages ?? 1, config.site?.maxThreadPages ?? 2);
 
   // 1 スレ分の本文を取得する(レス番号順ソートと updatedAt の算出まで行う)。
-  // メインスレ(directThreads)でも同じ関数を使う
-  const collectThread = async (thread: ThreadMeta): Promise<Post[]> => {
+  // メインスレ(directThreads)でも同じ関数を使う。
+  // threadCfg / mockFile / threadMaxPages は板ごとの差し替え用(directThreads 要素)
+  const collectThread = async (
+    thread: ThreadMeta,
+    threadCfg: ThreadConfig = config.thread ?? {},
+    mockHtml: string = mockThreadHtml,
+    threadMaxPages: number = maxThreadPages,
+  ): Promise<Post[]> => {
     let pageUrl: string | null = thread.url;
     let title = "";
-    const seenNums = new Set<number>();
+    // ページ送り・ページ跨ぎの重複排除。投稿 ID(post.key)を持つ板(レス番号が
+    // ページごとに振り直される板)は post.key を優先する
+    const seen = new Set<string>();
     const posts: Post[] = [];
-    for (let page = 1; page <= maxThreadPages && pageUrl; page++) {
-      const html = await getHtml(pageUrl, mockThreadHtml);
-      const parsed = parseThread(html, config.thread) as {
+    const keyOf = (post: Post) => (post.key ? `k:${post.key}` : `n:${post.num}`);
+    for (let page = 1; page <= threadMaxPages && pageUrl; page++) {
+      const html = await getHtml(pageUrl, mockHtml);
+      const parsed = parseThread(html, threadCfg, { baseUrl: pageUrl ?? undefined }) as {
         title: string;
         posts: Post[];
       };
@@ -240,13 +304,14 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
       // ページ送りで重複したレス(モックで全ページ同じファイルなど)と
       // 性別排除キーワードに該当するレスは除外
       for (const post of parsed.posts) {
-        if (seenNums.has(post.num) || isSexExcluded(post, config.filters)) {
+        const k = keyOf(post);
+        if (seen.has(k) || isSexExcluded(post, config.filters)) {
           continue;
         }
-        seenNums.add(post.num);
+        seen.add(k);
         posts.push(post);
       }
-      const nextHref = parseNextPageUrl(html, config.thread);
+      const nextHref = parseNextPageUrl(html, threadCfg);
       pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : null;
     }
     // モックモードでは全スレが同じサンプルファイルを共有するため上書きしない
@@ -255,8 +320,20 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
     }
     // 元サイトのスレページと同じく、レス番号の新しい順(降順)で格納する。
     // p=1 が最新ページ・ページ内も新しい順のため、実サイトの見た目と一致させる
-    // (昇順にすると「一番新しいレスが上に来ない」と感じるため 2026-09-14 に変更)
-    posts.sort((a, b) => b.num - a.num);
+    // (昇順にすると「一番新しいレスが上に来ない」と感じるため 2026-09-14 に変更)。
+    // 投稿 ID(post.key)を持つ板(サブ掲示板の 1 枚板など)は 1 ページ目が最新のため
+    // 日時の新しい順に並べ、num を 1 始まりで振り直す(1 = 最新)
+    const keyed = posts.some((p) => p.key);
+    posts.sort(
+      keyed
+        ? (a, b) => (parsePostDateMs(b.date) ?? 0) - (parsePostDateMs(a.date) ?? 0)
+        : (a, b) => b.num - a.num,
+    );
+    if (keyed) {
+      posts.forEach((p, i) => {
+        p.num = i + 1;
+      });
+    }
     // 最終更新日時 = レス日時の最大値(表示順とは無関係に実レスから算出)
     let updatedAt: string | undefined;
     for (const post of posts) {
@@ -284,7 +361,9 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
 
   // 5. メインスレ(directThreads)。一覧とは別に mainThreads として返す
   // (フロントの一覧下部に「メインスレ」リンクとして表示する)。
-  // タイトルフィルタは適用しない(明示指定)。一覧と ID 重複時は取得済み詳細を流用
+  // タイトルフィルタは適用しない(明示指定)。一覧と ID 重複時は取得済み詳細を流用。
+  // 要素に id / mockFile / category / thread(板ごとのパーサ設定)を指定できる(
+  // 異なるエンジンの板=サブ掲示板をここに混在できる)
   const mainThreads: ThreadMeta[] = [];
   const directList = config.directThreads ?? [];
   if (directList.length > 0) {
@@ -299,23 +378,30 @@ export async function scrapeThreads(config: BoardConfig): Promise<ScrapeResult> 
       mains.map(async (entry) => {
         const spec = typeof entry === "string" ? { url: entry } : entry;
         const url = resolveUrl(spec.url, config.targetUrl);
-        const id = threadIdFromUrl(url);
+        // スレ ID の明示指定(id クエリを持たない板ページ URL 向け)。
+        // 未指定なら従来どおり URL から生成
+        const id = spec.id?.trim() || threadIdFromUrl(url);
         if (!id) return;
+        const mockHtml = MOCK_FILES[spec.mockFile || "sample-thread.html"] ?? mockThreadHtml;
         const existing = details[id];
         if (existing) {
           // 一覧由来と同じスレ → 取得済みの詳細をそのまま使う
-          mainThreads.push({ ...existing, category: "メインスレ" });
+          mainThreads.push({ ...existing, category: spec.category || "メインスレ" });
           return;
         }
         const meta: ThreadMeta = {
           id,
           title: spec.title || "",
           url,
-          category: "メインスレ",
+          category: spec.category || "メインスレ",
           resCount: 0,
           createdAt: "",
         };
-        const posts = await collectThread(meta);
+        const tcfg = resolveThreadCfg(spec.thread, config);
+        // 板ごとのページ上限(未指定なら共通値)。サブリクエスト上限の
+        // 保険として共通上限(maxThreadPages)は超えられない
+        const specMaxPages = Number(spec.maxPages) > 0 ? Number(spec.maxPages) : maxThreadPages;
+        const posts = await collectThread(meta, tcfg, mockHtml, Math.min(specMaxPages, maxThreadPages));
         const detail = buildDetail(meta, posts);
         details[id] = detail;
         mainThreads.push({ ...detail });

@@ -65,7 +65,9 @@ const JITTER_DEG = 0.00045;
 export function pinForPost(post, thread, config) {
   const matched = matchPlace(post, thread?.title, config);
   if (!matched) return null;
-  const pinKey = `${thread?.id ?? ""}:${post?.num ?? ""}`;
+  // ジッタの種は投稿の正体。投稿 ID(post.key)を持つ板(レス番号のない板)では
+  // num が実行ごとに振り直されるため post.key を優先する
+  const pinKey = `${thread?.id ?? ""}:${post?.key || (post?.num ?? "")}`;
   return {
     lat: jittered(pinKey, "lat", matched.place.lat, JITTER_DEG),
     lng: jittered(pinKey, "lng", matched.place.lng, JITTER_DEG),

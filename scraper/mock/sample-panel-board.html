@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-111439779-1"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'UA-111439779-1');
+    </script>
+
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="keywords" content="飲み会,居酒屋,仲間,募集,ほげ,交流">
+    <meta name="description" content="飲み会仲間との出会いの場『ほげ部屋(交流)』です。">
+    <title>ほげ大阪掲示板</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="/css/main.css?tag=20230816">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/2.2.0/js.cookie.min.js"></script>
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <link rel="shortcut icon" type="image/vnd.microsoft.icon" href="/favicon/favicon.ico">
+    <link rel="icon" type="image/vnd.microsoft.icon" href="/favicon/favicon.ico">
+
+    <script type="text/javascript" src="/js/common.js?tag=20221015"></script>
+    <script type="text/javascript" src="/js/upload.js?tag=20221015"></script>
+  </head>
+
+  <body>
+    <div id="header">
+      <div class="container">
+        <h1>
+          <img src="/img/title.png" alt="ほげ">
+        </h1>
+      </div>
+      <div class="check_line"></div>
+    </div>
+    <!-- /header-->
+
+    <div id="body">
+
+    <!--↓BODY↓-->
+
+<!-- ad -->
+<div id="im-a6a4d3bfa61e494caa06a0b080b0e73c">
+  <script async src="//imp-adedge.hoge.com/script/v1/spot.js?20181121"></script>
+  <script>(window.adsbyimobile=window.adsbyimobile||[]).push({pid:73251,mid:523182,asid:1717050,type:"banner",display:"interstitial",elementid:"im-a6a4d3bfa61e494caa06a0b080b0e73c"})</script>
+</div>
+<!-- ad -->
+
+<div class="container">
+  <ol class="breadcrumb">
+    <li>
+      <a href="/">
+        <span class="glyphicon glyphicon-home" aria-hidden="true"></span> ほげ
+      </a>
+    </li>
+    <li><a href="/board/3/">大阪掲示板</a></li>
+    <li>1ページ</li>
+  </ol>
+
+  <div class="row">
+    <div class="col-xs-12 col-sm-9 col-md-8">
+
+      <div class="margin-10 jumbotron">
+        <h2 style="font-size: 26px;">大阪掲示板</h2>
+        <div style="font-size: 14px; line-height: 16px;">20歳未満閲覧禁止<br>
+          不適切画像・薬物・誹謗中傷<br>
+          営利目的・愚痴暴言は即アク禁
+        </div>
+      </div>
+
+      <div class="alert alert-warning" role="alert">
+        <a href="#" class="alert-warning">住所：大阪、性別：男性＆女性</a>
+      </div>
+
+      <div class="row margin-10">
+        <div class="col-xs-6">
+          <a href="/board/post/3/"><button class="btn btn-primary btn-lg" style="width:100%;">投稿する</button></a>
+        </div>
+        <div class="col-xs-6">
+          <button class="btn btn-primary btn-lg" id="board_search_open" style="width:100%;">検索する</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-xs-12 col-sm-9">
+          <div id="board_search_form" data-search-url="/board/search/3/">
+            <form>
+              <div class="form-column">
+                <select name="place" class="form-control" id="search_place">
+                  <option value="0" selected>住所</option>
+                  <option value="8">北区</option>
+                  <option value="9">中央区</option>
+                  <option value="10">天王寺</option>
+                  <option value="11">梅田</option>
+                  <option value="12">難波</option>
+                  <option value="13">大阪</option>
+                  <option value="14">堺</option>
+                </select>
+              </div>
+              <div class="form-column">
+                <select name="sex" class="form-control" id="search_sex">
+                  <option value="0" selected>性別</option>
+                  <option value="1">男性 ＆ 女性</option>
+                  <option value="2">男性</option>
+                  <option value="3">女性</option>
+                </select>
+              </div>
+              <button type="button" id="board_search_submit" class="btn btn-primary form-control">この条件で検索する</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:iori@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> いおり</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">35〜44歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    ホスト系、中性など、キレイ系な飲み友が欲しいです。<br>
+    ゆくゆくは定期的に一緒に飲みに行ける関係になりたい。<br>
+    飲みはワイワイ盛り上がる感じから、じっくり語り合うのも好き。<br>
+    責任感のある優しい方待ってますー！
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/71TJrqTPLOEGUDopbCq9IGOBw4L3RWak" data-lightbox="71TJrqTPLOEGUDopbCq9IGOB">
+        <img class="thumbnail" src="/board/view/71TJrqTPLOEGUDopbCq9IGOBw4L3RWak200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 02:00
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example1/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example1/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example1/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-4">
+    <a href="mailto:korekara@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> これから</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">25〜34歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    条件あり梅田駅徒歩３分場所あり。普通の服装です。雑談のみor飲みどちらでも可。<br>
+    電話（基本音声のみ）も可能です。普通の話し方です。<br>
+    電話は時間に応じて相談、ペイペイ決済のみ対応。<br>
+    直電のみ非通知可、LINEはしません。<br>
+    リアル飲みか電話どちら希望か添えてメール下さい。
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/DNctJDCSMWbDxZQLLaMQIOQffcBcxQ6d" data-lightbox="DNctJDCSMWbDxZQLLaMQIOQf">
+        <img class="thumbnail" src="/board/view/DNctJDCSMWbDxZQLLaMQIOQffcBcxQ6d200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/DNctJDCSMWbDxZQLLaMQIOQfGQUzyB13" data-lightbox="DNctJDCSMWbDxZQLLaMQIOQf">
+        <img class="thumbnail" src="/board/view/DNctJDCSMWbDxZQLLaMQIOQfGQUzyB13200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/DNctJDCSMWbDxZQLLaMQIOQfFR00hAkv" data-lightbox="DNctJDCSMWbDxZQLLaMQIOQf">
+        <img class="thumbnail" src="/board/view/DNctJDCSMWbDxZQLLaMQIOQfFR00hAkv200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 01:56
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example2/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example2/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example2/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:airi@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> 愛里</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">35〜44歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    21日のお昼からかな。<br>
+    普通の愛里と申します。<br>
+    ひたすらずっと話を聞いてくれる優しい方を募集します。<br>
+    飲みも好きですけど…まずはゆっくり話したいです。<br>
+    場合により複数人になっちゃうけど、、<br>
+    お泊まりくらいされたい感じです。<br>
+    よろしくね💫　170・58
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 01:40
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example3/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example3/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example3/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:siroyume@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> 白夢ぴくしぃ</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">25〜34歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    普通の男子です<br>
+    特別な趣味は全くありませんが普通の感覚で生きてて、地毛で髪長くて髪型や顔立ち的にも素で普段から意識的ではないですが普通に見える容姿です<br>
+    加工ほとんどしてない為、写真と実物変わりません<br>
+    信用出来なくて怖い方、LINEなど交換してビデオ通話も可能です<br>
+    161/51/26<br>
+    お願いありで大丈夫な方お願いします<br>
+    内容ではなく、基本的には年齢によって金額変動させてるので、年齢と最大額など最初に記載していただけたらスムーズですっ<br>
+    40歳以降からは最低相談からです<br>
+    それ以外なら何でも大丈夫です！<br>
+    梅田駅から徒歩9分 難波駅から徒歩10分の場所にある俺ん家使えます😏<br>
+    ２DKでキングサイズ以上のベッドなので広めで快適かと思いますっ<br>
+    一応ですが結構な趣味あります！<br>
+    あくまでも趣味は参考程度に思っていただいて、それに付き合う事は必須ではないので予めご安心ください🥹<br>
+    宜しくお願いします🙇‍♀️
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/dig7T6cSd9v29ABy5e2K1diYQNuFdvRX" data-lightbox="dig7T6cSd9v29ABy5e2K1diY">
+        <img class="thumbnail" src="/board/view/dig7T6cSd9v29ABy5e2K1diYQNuFdvRX200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/dig7T6cSd9v29ABy5e2K1diYgRdeyoab" data-lightbox="dig7T6cSd9v29ABy5e2K1diY">
+        <img class="thumbnail" src="/board/view/dig7T6cSd9v29ABy5e2K1diYgRdeyoab200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/dig7T6cSd9v29ABy5e2K1diYRlAJOhqL" data-lightbox="dig7T6cSd9v29ABy5e2K1diY">
+        <img class="thumbnail" src="/board/view/dig7T6cSd9v29ABy5e2K1diYRlAJOhqL200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 01:22
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example4/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example4/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example4/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:t@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> t</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">25〜34歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">ガリ</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    定期的に会える方募集です☺️<br>
+    いちゃいちゃ好き、甘えん坊です<br>
+    話や一緒に過ごすのが好きな人だと合うかも<br>
+    お友達やパートナーも探してます<br>
+    プロフと顔写真付きで連絡ください💌
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/RGp1sm4SxN3plIkMbA4RJ2znKr8rZCh8" data-lightbox="RGp1sm4SxN3plIkMbA4RJ2zn">
+        <img class="thumbnail" src="/board/view/RGp1sm4SxN3plIkMbA4RJ2znKr8rZCh8200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 01:21
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example5/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example5/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example5/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-4">
+    <a href="mailto:korekara2@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> これから</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">25〜34歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    条件あり梅田駅徒歩３分場所あり。普通の服装です。雑談のみor飲みどちらでも可。<br>
+    電話（基本音声のみ）も可能です。普通の話し方です。<br>
+    電話は時間に応じて相談、ペイペイ決済のみ対応。<br>
+    直電のみ非通知可、LINEはしません。<br>
+    リアル飲みか電話どちら希望か添えてメール下さい。
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/ZO4h391HzQOoKV1zEkT5CjlZ3DVMDWzY" data-lightbox="ZO4h391HzQOoKV1zEkT5CjlZ">
+        <img class="thumbnail" src="/board/view/ZO4h391HzQOoKV1zEkT5CjlZ3DVMDWzY200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/ZO4h391HzQOoKV1zEkT5CjlZV5vUAUNa" data-lightbox="ZO4h391HzQOoKV1zEkT5CjlZ">
+        <img class="thumbnail" src="/board/view/ZO4h391HzQOoKV1zEkT5CjlZV5vUAUNa200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/ZO4h391HzQOoKV1zEkT5CjlZa630s85p" data-lightbox="ZO4h391HzQOoKV1zEkT5CjlZ">
+        <img class="thumbnail" src="/board/view/ZO4h391HzQOoKV1zEkT5CjlZa630s85p200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 01:10
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example6/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example6/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example6/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:kanna@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> かんな</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">20〜24歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    梅田駅らへんで飲み友募集してます<br>
+    こっち来てくれるなら居酒屋代は要らないよ<br>
+    動画とかも売ってます（趣味の動画）<br>
+    条件によって写真いいよ
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/tZ3jSuITfWWYwaWunU5idaylRhch5h8u" data-lightbox="tZ3jSuITfWWYwaWunU5idayl">
+        <img class="thumbnail" src="/board/view/tZ3jSuITfWWYwaWunU5idaylRhch5h8u200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/tZ3jSuITfWWYwaWunU5idaylgcu6bDHI" data-lightbox="tZ3jSuITfWWYwaWunU5idayl">
+        <img class="thumbnail" src="/board/view/tZ3jSuITfWWYwaWunU5idaylgcu6bDHI200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 00:54
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example7/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example7/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example7/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:maa@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> まぁ</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">35〜44歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">ポチャ</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    普通、服フェチ💕<br>
+    定期的に交流出来る方探してます🤤<br>
+    気が合いそうなら長期で飲み友が欲しい🥺❣️<br>
+    詳しいことはメールかLINEでお話ししましょう❣️<br>
+    写真付きでメールお待ちしてます🥺💞<br>
+    写真ない方には返事出してません🙇‍♀️<br>
+    ご了承ください。
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/bHlJiuMb3ErLH22NJiMA9vMeSNYk5yRg" data-lightbox="bHlJiuMb3ErLH22NJiMA9vMe">
+        <img class="thumbnail" src="/board/view/bHlJiuMb3ErLH22NJiMA9vMeSNYk5yRg200" style="display:inline;">
+      </a>
+    </div>
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/bHlJiuMb3ErLH22NJiMA9vMeuNKlXUYV" data-lightbox="bHlJiuMb3ErLH22NJiMA9vMe">
+        <img class="thumbnail" src="/board/view/bHlJiuMb3ErLH22NJiMA9vMeuNKlXUYV200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 00:52
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example8/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example8/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">修正</button></a>
+    <a href="/board/delete/3/example8/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+<div class="panel panel-default panel-board">
+  <div class="panel-head style-1">
+    <a href="mailto:rumi@hoge.com"><span class="glyphicon glyphicon-envelope" aria-hidden="true" style="vertical-align: -1px;"></span> 瑠美</a> <span class="label label-opt">普通</span>
+  </div>
+  <div class="panel-body panel-prof">
+    <span class="pp_outer">[住所:<span class="pp_inner">梅田</span>]</span>
+    <span class="pp_outer">[年齢:<span class="pp_inner">35〜44歳</span>]</span>
+    <span class="pp_outer">[ｽﾀｲﾙ:<span class="pp_inner">普通</span>]</span>
+    <span class="pp_outer">[体型:<span class="pp_inner">普通</span>]</span>
+  </div>
+  <div class="panel-body panel-mess">
+    今から会えるドライブ🚗好きな50代60代男性いませんか❓️週1でデート💑出来る飲み友♥️的な人を探してます。梅田市内から足🚘ナシ、40歳女性生活者です。末永くお付き合い💕出来る人がいれば嬉しい😄です。遊び人、日本語が通じない、写メ要求などの方には返信しません。よく読んで下さい❗️
+  </div>
+  <div class="row panel-image">
+    <div class="col-xs-4 col-sm-3 panel-image-item">
+      <a href="/board/view/Vuog6pFjkYc80hwGXOH3toq5sz5YCdaI" data-lightbox="Vuog6pFjkYc80hwGXOH3toq5">
+        <img class="thumbnail" src="/board/view/Vuog6pFjkYc80hwGXOH3toq5sz5YCdaI200" style="display:inline;">
+      </a>
+    </div>
+  </div>
+  <div class="panel-body panel-time">
+    <span class="glyphicon glyphicon-time" aria-hidden="true"></span> 2026.09.15(火) 00:48
+  </div>
+  <div class="panel-footer" style="text-align: right; padding:5px 15px;">
+    <a href="/board/report/3/example9/"><button type="button" class="btn btn-default modal-report-open" style="font-size: 14px; line-height: 16px;">通報</button></a>
+    <a href="/board/edit/3/example9/"><button type="button" class="btn btn-default" style="font-size: 14px; line-height: 16px;">削除</button></a>
+  </div>
+</div>
+
+      <div class="row" style="margin: 5px 0">
+        <div class="col-xs-4">
+          <div class="board_dmm"><a href="" target="_blank"><img class="dmm_img" src=""><span class="dmm_detail"></span></a></div>
+        </div>
+        <div class="col-xs-4">
+          <div class="board_dmm"><a href="" target="_blank"><img class="dmm_img" src=""><span class="dmm_detail"></span></a></div>
+        </div>
+        <div class="col-xs-4">
+          <div class="board_dmm"><a href="" target="_blank"><img class="dmm_img" src=""><span class="dmm_detail"></span></a></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-xs-12">
+          <div class="col-xs-6">
+            <button type="button" class="btn btn-primary form-control" disabled><span class="glyphicon glyphicon-arrow-left" aria-hidden="true"></span> 前</button>
+          </div>
+          <div class="col-xs-6">
+            <a href="./2">
+              <button type="button" class="btn btn-primary form-control">次 <span class="glyphicon glyphicon-arrow-right" aria-hidden="true"></span></button>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <nav aria-label="ページ移動ナビゲーション">
+        <ul class="pagination pagination-lg justify-content-center">
+          <li class="page-item active">
+            <span class="page-link">1
+              <span class="sr-only">表示中のページです</span>
+            </span>
+          </li>
+          <li class="page-item"><a class="page-link" href="./2">2</a></li>
+          <li class="page-item"><a class="page-link" href="./3">3</a></li>
+          <li class="page-item"><a class="page-link" href="./4">4</a></li>
+          <li class="page-item"><a class="page-link" href="./5">5</a></li>
+          <li class="page-item"><a class="page-link" href="./6">6</a></li>
+          <li class="page-item"><a class="page-link" href="./7">7</a></li>
+          <li class="page-item"><a class="page-link" href="./8">8</a></li>
+          <li class="page-item"><a class="page-link" href="./9">9</a></li>
+        </ul>
+      </nav>
+
+      <div class="row margin-10">
+        <div class="col-xs-12 col-sm-6">
+          <a href="/board/post/3/">
+            <button class="btn btn-primary btn-lg" style="width:100%;">投稿する</button>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- modal -->
+<div class="modal fade" id="modal-report" tabindex="-1" role="dialog" aria-labelledby="modal-report-label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-report-label">通報フォーム</h5>
+      </div>
+      <div class="modal-body">
+        <div class="modal-success-mess">承りました。<br>ご報告ありがとうございます。</div>
+        <div class="modal-form-wrap">
+          <div class="modal-error-mess alert alert-warning">通信中エラーが発生しました。<br><a>こちら</a>の通報フォームをお試しください。</div>
+          <form id="modal-report-form">
+            <div class="form-group">
+              <label for="modal-report-name" class="col-form-label">メールアドレス(任意)</label>
+              <input type="text" class="form-control modal-sani" id="modal-report-mail" name="mail" placeholder="例: anyone@example.com" data-opt='{"type":"mailaddress","required":false}'>
+              <div class="error_mess" id="modal-error-mailaddress">メールアドレスが正しくありません</div>
+            </div>
+            <div class="form-group">
+              <label for="modal-report-message" class="col-form-label">通報理由(必須)</label>
+              <textarea class="form-control modal-sani" id="modal-report-message" name="mess" placeholder="例: 営利目的、不適切画像、薬物、暴言、関係のない書き込み等" data-opt='{"type":"message","required":true}'></textarea>
+              <div class="error_mess" id="modal-error-message">500文字以内でご入力ください</div>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">閉じる</button>
+        <button type="button" class="btn btn-primary" id="modal-report-submit">送信</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /modal -->
+
+    <!--↑BODY↑-->
+
+    <div style="height: 20px;"></div>
+    </div>
+
+    <!-- footer -->
+    <div id="footer">
+      <div class="container">
+        <div class="row">
+          <div class="col-xs-12 col-sm-3">
+            <div style="margin: 10px 0 0 0;">
+              <a href="/contact/">
+                <button type="button" class="btn btn-primary" style="width:100%;">お問い合わせ</button>
+              </a>
+            </div>
+            <div style="margin: 10px 0 0 0;">
+              <a href="/sponsor/">
+                <button type="button" class="btn btn-primary" style="width:100%;">広告主様募集</button>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /footer-->
+
+  </body>
+</html>

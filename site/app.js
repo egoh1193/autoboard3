@@ -171,15 +171,17 @@ function renderThread() {
       for (const post of thread.posts) {
         const article = document.createElement("article");
         article.className = "post";
-        // /map の吹き出しからのリンク(/thread?id=…#post-NN)用のアンカー
-        article.id = `post-${post.num}`;
+        // /map の吹き出しからのリンク(/thread?id=…#post-…)用のアンカー。
+        // 投稿 ID(post.key)を持つ板(レス番号のない板)は投稿 ID をアンカーに使う
+        // (num は実行ごとに振り直されるため URL が安定しない)
+        article.id = `post-${post.key || post.num}`;
 
         const header = document.createElement("div");
         header.className = "post-header";
 
         const num = document.createElement("span");
         num.className = "post-num";
-        num.textContent = String(post.num);
+        num.textContent = String(post.num ?? "");
 
         const name = document.createElement("span");
         name.className = "post-name";
@@ -193,12 +195,16 @@ function renderThread() {
 
         // 年齢・性別など、パーサーが追加で抽出した付帯情報
         // mailUrl は内部用(バッチがメールアドレス抽出に使うリンク)、
+        // key はアンカー用の投稿 ID(生の ID を付帯情報として出さない)、
         // images は本文の下にリンクとして個別描画するため、ここでは対象外
-        const KNOWN_FIELDS = ["num", "name", "date", "posterId", "body", "mailUrl", "images"];
+        const KNOWN_FIELDS = ["num", "key", "name", "date", "posterId", "body", "mailUrl", "email", "images"];
         const LABELS = {
           age: "年齢",
           sex: "性別",
+          area: "住所",
           looks: "ﾙｯｸｽ",
+          style: "ｽﾀｲﾙ",
+          figure: "体型",
           wish: "区分",
           email: "メール",
           ip: "IP",
@@ -283,7 +289,8 @@ function buildPopup(pin) {
 
   const link = document.createElement("a");
   link.className = "map-popup-link";
-  link.href = `/thread?id=${encodeURIComponent(pin.threadId)}#post-${pin.num}`;
+  // 投稿 ID(post.key)を持つ板(レス番号のない板)は投稿 ID をアンカーに使う
+  link.href = `/thread?id=${encodeURIComponent(pin.threadId)}#post-${pin.key || pin.num}`;
   link.textContent = "このスレを開く";
   box.append(link);
   return box;

@@ -7,7 +7,7 @@ import * as cheerio from "cheerio";
 const MOCK_BASE = "https://mock.invalid/"; // 相対 URL 解決用のダミー基地URL
 
 // フィールド指定文字列 "selector@attr" を分解する。
-// attr は "text"(既定) / "html" / 任意の属性名 (href, src など)。
+// attr は "text"(既定) / "html" / "textbr"(br を改行化したテキスト) / 任意の属性名 (href, src など)。
 export function splitFieldSpec(spec) {
   const at = spec.lastIndexOf("@");
   if (at === -1) {
@@ -26,6 +26,21 @@ function extractFieldValue($, el, spec) {
   }
   if (attr === "text") {
     return target.text().trim();
+  }
+  if (attr === "textbr") {
+    // <br> を改行に変換した上でタグを除去する(.text() は <br> が消えて
+    // 行構造が失われるため)。ソース上の <br> 直後の改行・インデントも
+    // 一緒に吸収する(br と改行で 2 重の空行にならないように)
+    const html = (target.html() ?? "").replace(/<br\s*\/?>[ \t]*\r?\n?/gi, "\n");
+    return cheerio
+      .load(html)
+      .root()
+      .text()
+      .split("\n")
+      .map((l) => l.trim())
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
   if (attr === "html") {
     return target.html()?.trim() ?? "";
@@ -74,25 +89,70 @@ export function parseNextPageUrl(html, listConfig) {
 // スレッド個別ページをパースし、タイトルとレス配列を返す。
 // threadConfig.parser === "hr-split" のときは旧式掲示板向けの
 // <hr> 分割パーサーを使い、それ以外はセレクタベース(postsSelector)で処理する。
-export function parseThread(html, threadConfig) {
+// opts.baseUrl を渡すとセレクタパーサーが相対 URL(画像など)を絶対化する
+export function parseThread(html, threadConfig, opts = {}) {
   if (threadConfig.parser === "hr-split") {
     return parseThreadHrSplit(html, threadConfig);
   }
-  return parseThreadBySelector(html, threadConfig);
+  return parseThreadBySelector(html, threadConfig, opts);
 }
 
-// セレクタベースのパーサー: 各レスが postsSelector で囲まれた要素になっている HTML 向け
-function parseThreadBySelector(html, threadConfig) {
+// セレクタベースのパーサー: 各レスが postsSelector で囲まれた要素になっている HTML 向け。
+// fields に加えて以下のオプションに対応(スレッド一覧の parseList と同じ発想):
+//   - fieldPatterns: レス要素全体のテキストへの正規表現抽出
+//     ([住所:梅田] のようにテキストに直接書かれる付帯情報向け。キャプチャ (1) を使う)
+//   - imagesSpec: レス添付画像の URL(全件マッチ → post.images 配列)
+//   - keySpec / keyPattern: レス固有の投稿 ID(通報・削除リンクの URL など)を抽出し
+//     post.key に入れる。レス番号がない掲示板で新着判定・重複排除のキーに使う
+// num はページ内の表示順(1 始まり)。ページ跨ぎの重複排除は呼び出し側で
+// post.key(無ければ num)で行うこと(ページごとに番号が振り直される形式があるため)
+function parseThreadBySelector(html, threadConfig, opts = {}) {
   const $ = cheerio.load(html);
   const title = threadConfig.titleSelector
     ? extractFieldValue($, $.root(), threadConfig.titleSelector)
     : "";
+
+  const imagesSpec = threadConfig.imagesSpec
+    ? splitFieldSpec(threadConfig.imagesSpec)
+    : null;
+  const keySpec = threadConfig.keySpec ? splitFieldSpec(threadConfig.keySpec) : null;
+  const keyRe = threadConfig.keyPattern ? new RegExp(threadConfig.keyPattern) : null;
 
   const posts = [];
   $(threadConfig.postsSelector).each((i, el) => {
     const post = { num: i + 1 };
     for (const [field, spec] of Object.entries(threadConfig.fields)) {
       post[field] = extractFieldValue($, el, spec);
+      // mailto: 直リンク(名前欄にメールアドレスが直接 <a href="mailto:...">
+      // で張られている板。個別メールページが存在しないためページ取得不要)は
+      // 接頭辞を剥がして post.email に入れる(percent-decode はメールアドレス
+      // には通常影響しない)。バッチのメールページ取得(4.5)は
+      // post.email 済みのレスをスキップする
+      if (field === "email" && post.email.startsWith("mailto:")) {
+        post.email = decodeURIComponent(post.email.slice(7)).trim();
+      }
+    }
+    let text = null;
+    for (const [field, pattern] of Object.entries(threadConfig.fieldPatterns ?? {})) {
+      text ??= $(el).text();
+      const m = text.match(new RegExp(pattern));
+      post[field] = m ? m[1] ?? "" : "";
+    }
+    if (imagesSpec) {
+      const urls = [];
+      $(el).find(imagesSpec.selector).each((_, img) => {
+        const attr = imagesSpec.attr === "text" ? "src" : imagesSpec.attr;
+        const v = (img.attribs?.[attr] ?? "").trim();
+        // 相対 URL は呼び出し側が渡したそのページの URL 基準で絶対化する
+        // (ミラーサイト上で相対 URL は別サイトを指してしまうため)
+        if (v) urls.push(opts.baseUrl ? resolveUrl(v, opts.baseUrl) : v);
+      });
+      post.images = urls;
+    }
+    if (keySpec) {
+      const raw = extractFieldValue($, el, threadConfig.keySpec);
+      const m = keyRe ? raw.match(keyRe) : null;
+      post.key = (keyRe ? m?.[1] : raw) ?? "";
     }
     posts.push(post);
   });
@@ -324,10 +384,14 @@ export function resolveUrl(href, baseUrl) {
 }
 
 // 日時文字列("2026-09-04 22:53" など)を epoch ms に変換する。
+// "2026.09.15(火) 02:00" 形式(ドット区切り + 曜日付き)にも対応。
 // 掲示板の日時は日本時間で書かれているため、実行環境のタイムゾーンに
 // 依存しないよう UTC+9 固定で解釈する。解釈できない場合は null
 export function parsePostDateMs(dateStr) {
-  const m = /(\d{4})-(\d{2})-(\d{2})[ \t]+(\d{1,2}):(\d{2})/.exec(dateStr ?? "");
+  const s = String(dateStr ?? "");
+  const m =
+    /(\d{4})-(\d{1,2})-(\d{1,2})[ \t]+(\d{1,2}):(\d{2})/.exec(s) ??
+    /(\d{4})\.(\d{1,2})\.(\d{1,2})[^0-9]*(\d{1,2}):(\d{2})/.exec(s);
   if (!m) return null;
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 9 * 60 * 60 * 1000;
 }

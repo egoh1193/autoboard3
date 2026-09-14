@@ -40,7 +40,10 @@ import {
 import { pinForPost } from "./map.mjs";
 
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SITE_DATA_DIR = path.resolve(SCRAPER_DIR, "../site/data");
+// 出力先(site/data に JSON 生成)。テスト時は SCRAPER_DATA_DIR で
+// 別ディレクトリに逃がせる(本番の出力 site/data は実行ごとに再生成されるため
+// 手元検証では既存データを壊さないように使う)
+const SITE_DATA_DIR = path.resolve(SCRAPER_DIR, process.env.SCRAPER_DATA_DIR || "../site/data");
 const CONFIG_PATH = path.join(SCRAPER_DIR, "config.json");
 const EXAMPLE_CONFIG_PATH = path.join(SCRAPER_DIR, "config.example.json");
 
@@ -154,6 +157,12 @@ async function loadGistSettings() {
     blackList: normalizeBlackList(parsed.blackList),
     // 直接指定スレ(directThreads)。文字列 or {url, title, newestFirst} の配列
     directThreads: Array.isArray(parsed.directThreads) ? parsed.directThreads : null,
+    // 板ごとのパーサ設定(directThreads 要素の thread に名前で参照させる)。
+    // 同じ板の設定を要素ごとに複製せずに済む(将来スレ追加が容易になる)
+    threadConfigs:
+      parsed.threadConfigs && typeof parsed.threadConfigs === "object" && !Array.isArray(parsed.threadConfigs)
+        ? parsed.threadConfigs
+        : null,
   };
 }
 
@@ -421,16 +430,57 @@ async function main() {
   // 「メインスレ」など一覧を経由せず毎回巡回したいスレを URL で直接指定する。
   // 要素は URL 文字列 or {url, title, newestFirst}:
   //   - newestFirst: true のスレは降順ページング(p=1 が最新)として取得する
+  //   - id: スレ ID の明示指定(id クエリを持たない板ページ URL 向け)。
+  //     未指定なら threadIdFromUrl の従来ルール
+  //   - mockFile: モックモード時に使う HTML ファイル名(mock/ 以下)
+  //   - thread: 板ごとのパーサ設定。オブジェクト(インライン)または
+  //     threadConfigs の名前(文字列)。異なるエンジンの板(サブ掲示板)を
+  //     ここに混在できる。URL は targetUrl 基準で解決されるため
+  //     別ドメインの絶対 URL も書ける
   // 優先順: 設定 gist(gist の JSON に directThreads があればそちら) > config
+  // threadConfigs も gist 側があれば gist を優先(要素単位でマージ)
   // 明示指定のためタイトルフィルタ(matchesFilters)は適用しない。
   // 一覧由来のスレと ID が重複した場合は一覧側を優先してスキップ
   // SCRAPER_SKIP_DIRECT=1 の場合は directThreads をスキップする(直接指定スレは
   // 別ワークフロー(SCRAPER_DIRECT_ONLY=1)が取得・通知するため二重通知を避ける)
+  // SCRAPER_DIRECT_THREADS 環境変数(JSON 配列)も受ける(Worker と同名 env で
+  // パリティ。config.json を触らず手元検証できる)。優先順: 環境変数 > gist > config
+  const envDirectRaw = (process.env.SCRAPER_DIRECT_THREADS ?? "").trim();
+  let envDirectThreads = [];
+  if (envDirectRaw) {
+    try {
+      const parsed = JSON.parse(envDirectRaw);
+      if (Array.isArray(parsed)) {
+        envDirectThreads = parsed;
+      }
+    } catch (err) {
+      console.warn(`[scraper] 警告: SCRAPER_DIRECT_THREADS の解釈に失敗したため無視します: ${err.message}`);
+    }
+  }
   const directThreadSpecs = skipDirect
     ? []
-    : gistSettings?.directThreads?.length
-      ? gistSettings.directThreads
-      : (config.directThreads ?? []);
+    : envDirectThreads?.length
+      ? envDirectThreads
+      : gistSettings?.directThreads?.length
+        ? gistSettings.directThreads
+        : (config.directThreads ?? []);
+  // 板ごとのパーサ設定の解決(threadConfigs の名前参照 or インライン)
+  const threadConfigs = {
+    ...(config.threadConfigs ?? {}),
+    ...(gistSettings?.threadConfigs ?? {}),
+  };
+  const resolveThreadCfg = (ref) => {
+    if (ref === undefined || ref === null || ref === "") return undefined;
+    if (typeof ref === "string") {
+      const named = threadConfigs[ref];
+      if (!named) {
+        console.warn(`[scraper] 警告: threadConfigs[${ref}] が見つからないため共通設定を使います`);
+        return undefined;
+      }
+      return named;
+    }
+    return typeof ref === "object" ? ref : undefined;
+  };
   if (skipDirect) {
     console.log("[scraper] 直接指定スレはスキップします(SCRAPER_SKIP_DIRECT=1・別実行が担当)");
   }
@@ -442,7 +492,7 @@ async function main() {
     const url = String(spec.url ?? "").trim();
     if (!url) continue;
     const resolved = resolveUrl(url, config.targetUrl);
-    const id = threadIdFromUrl(resolved);
+    const id = String(spec.id ?? "").trim() || threadIdFromUrl(resolved);
     if (!id || seenDirect.has(id)) continue;
     seenDirect.add(id);
     threads.push({
@@ -459,6 +509,9 @@ async function main() {
       maxAgeDays: spec.maxAgeDays === undefined || spec.maxAgeDays === null
         ? undefined
         : Number(spec.maxAgeDays),
+      // 板ごとのパーサ設定・モック(未指定なら config.thread / 既定モック)
+      mockFile: String(spec.mockFile ?? "").trim() || undefined,
+      thread: resolveThreadCfg(spec.thread),
     });
     directCount++;
   }
@@ -527,6 +580,11 @@ async function main() {
   const mailEmailCache = new Map(); // メール送信ページ URL → メールアドレス(重複取得防止)
 
   async function fetchThreadDetail(thread) {
+    // スレ単位のパーサ設定(directThreads 要素の thread)があれば共通設定の代わりに
+    // 使う。異なるエンジンの板(サブ掲示板)を directThreads に混在できる
+    const tcfg = thread.thread ?? config.thread;
+    // モックモード時の HTML ファイル(板ごとに切り替えられる)
+    const mockFile = thread.mockFile || "sample-thread.html";
     // スレ単位の上限上書き(directThreads の各要素の maxPages / maxAgeDays)。
     // 未指定の項目は共通値(thread.maxPages / thread.maxAgeDays)を使う
     const maxPages = Number(thread.maxPages) > 0 ? Number(thread.maxPages) : maxThreadPages;
@@ -544,28 +602,50 @@ async function main() {
     };
 
     // 先頭ページ(p=1)を取得: タイトルとページ送りナビ(最終ページの推定元)を得る
-    const firstHtml = await getHtml(thread.url, "sample-thread.html");
-    const parsedFirst = parseThread(firstHtml, config.thread);
+    // baseUrl は画像などの相対 URL を絶対化するのに使う(そのページの URL 基準)
+    const firstHtml = await getHtml(thread.url, mockFile);
+    const parsedFirst = parseThread(firstHtml, tcfg, { baseUrl: thread.url });
     // 直接指定スレ(thread.newestFirst)などタイトル要素がないページは
     // config の title(directThreads の title)をフォールバックに使う
     const title = parsedFirst.title || thread.title || "";
 
-    const byNum = new Map(); // レス番号 → レス(ページ送り・ページ跨ぎの重複排除)
+    // ページ送り・ページ跨ぎの重複排除。投稿 ID(post.key)を持つ板はレス番号が
+    // ページごとに振り直されるため post.key を優先する(番号での排除は
+    // ページ跨ぎで誤重複排除になる)
+    const byKey = new Map();
+    const keyOf = (post) => (post.key ? `k:${post.key}` : `n:${post.num}`);
     const collect = (pagePosts) => {
       for (const post of pagePosts) {
-        if (!byNum.has(post.num)) byNum.set(post.num, post);
+        const k = keyOf(post);
+        if (!byKey.has(k)) byKey.set(k, post);
       }
     };
     collect(parsedFirst.posts);
 
-    if (thread.newestFirst) {
+    if (thread.thread) {
+      // 板ごとのパーサ設定があるスレ(サブ掲示板など):
+      // パーサ設定の nextPage リンクを辿ってページ送りする(板によってはページ番号が
+      // URL パスセグメントで、pageParam では組み立てられないため)。
+      // 1 ページ目が最新の板が前提(maxPages ページまで取得)
+      let pageUrl = thread.url;
+      let html = firstHtml;
+      for (let page = 1; page <= maxPages && pageUrl; page++) {
+        if (page > 1) {
+          const parsed = parseThread(html, tcfg, { baseUrl: pageUrl });
+          collect(parsed.posts);
+        }
+        const nextHref = parseNextPageUrl(html, tcfg);
+        pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : "";
+        html = pageUrl ? await getHtml(pageUrl, mockFile) : "";
+      }
+    } else if (thread.newestFirst) {
       // 降順ページング(p=1 が最新・p=2 が過去)のスレ:
       // 新しい側(p=1)から順に取得し、1 ページ全部が範囲外になった時点で
       // 打ち切る(降順なのでそれより古いページも範囲外のため)
       let fetchedPages = 1; // p=1 分
       for (let p = 2; fetchedPages < maxPages; p++) {
         const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
-        const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
+        const parsed = parseThread(await getHtml(pageUrl, mockFile), tcfg, { baseUrl: pageUrl });
         collect(parsed.posts);
         fetchedPages++;
         if (cutoff !== null && !parsed.posts.some(postInRange)) break;
@@ -580,7 +660,7 @@ async function main() {
       let fetchedPages = 1; // p=1 分
       for (let p = lastPage; p >= 2 && fetchedPages < maxPages; p--) {
         const pageUrl = buildThreadPageUrl(thread.url, pageParam, p);
-        const parsed = parseThread(await getHtml(pageUrl, "sample-thread.html"), config.thread);
+        const parsed = parseThread(await getHtml(pageUrl, mockFile), tcfg, { baseUrl: pageUrl });
         collect(parsed.posts);
         fetchedPages++;
         // このページのレスがすべて範囲外なら、より古いページも範囲外なので打ち切り
@@ -591,18 +671,31 @@ async function main() {
       let pageUrl = thread.url;
       let html = firstHtml;
       for (let page = 1; page <= maxPages && pageUrl; page++) {
-        const parsed = page === 1 ? parsedFirst : parseThread(html, config.thread);
+        const parsed = page === 1 ? parsedFirst : parseThread(html, tcfg, { baseUrl: pageUrl });
         collect(parsed.posts);
-        const nextHref = parseNextPageUrl(html, config.thread);
+        const nextHref = parseNextPageUrl(html, tcfg);
         pageUrl = nextHref ? resolveUrl(nextHref, pageUrl) : "";
       }
     }
 
-    // 範囲内かつ性別排除キーワードに該当しないレスのみ残して昇順に並べる
-    const inRange = [...byNum.values()].filter(postInRange);
+    // 範囲内かつ性別排除キーワードに該当しないレスのみ残す。
+    // 投稿 ID(post.key)を持つ板(サブ掲示板の 1 枚板など)は 1 ページ目が最新のため
+    // 日時の新しい順に並べ、num を 1 始まりで振り直す(表示順 = 1 が最新)。
+    // 持たない板は従来どおりレス番号昇順(notify.mjs が昇順を前提に差分を取るため)
+    const inRange = [...byKey.values()].filter(postInRange);
+    const keyed = inRange.some((post) => post.key);
     const posts = inRange
       .filter((post) => !isSexExcluded(post, config.filters))
-      .sort((a, b) => a.num - b.num);
+      .sort(
+        keyed
+          ? (a, b) => (parsePostDateMs(b.date) ?? 0) - (parsePostDateMs(a.date) ?? 0)
+          : (a, b) => a.num - b.num,
+      );
+    if (keyed) {
+      for (const [i, post] of posts.entries()) {
+        post.num = i + 1;
+      }
+    }
     return { title, posts, excluded: inRange.length - posts.length };
   }
 
@@ -622,9 +715,11 @@ async function main() {
       }
       runSummary.detailOk++;
 
-      // 4.5 名前欄リンクの個別ページからメールアドレスを抽出
+      // 4.5 名前欄リンクの個別ページからメールアドレスを抽出。
+      // mailto: 直リンクの板(post.email がパーサーで確定済み)はスキップ
       if (mailLinkRe && emailRe) {
         for (const post of posts) {
+          if (post.email) continue;
           if (!post.mailUrl) continue;
           const mailPageUrl = resolveUrl(post.mailUrl, thread.url);
           if (!mailEmailCache.has(mailPageUrl)) {
@@ -699,7 +794,10 @@ async function main() {
   }
 
   const okCount = threads.filter((t) => t.detail).length;
-  console.log(`[scraper] 完了: ${threads.length} 件中 ${okCount} 件の詳細を site/data/ に出力しました`);
+  console.log(
+    `[scraper] 完了: ${threads.length} 件中 ${okCount} 件の詳細を` +
+      (SITE_DATA_DIR.endsWith(path.join("site", "data")) ? " site/data/ に出力しました" : ` ${SITE_DATA_DIR} に出力しました`),
+  );
   runSummary.outputWritten = true;
   await writeRunSummary();
 }

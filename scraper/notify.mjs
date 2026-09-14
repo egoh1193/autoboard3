@@ -32,8 +32,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DATA_PATH = path.resolve(SCRAPER_DIR, "../site/data/threads.json");
-const DETAIL_DIR = path.resolve(SCRAPER_DIR, "../site/data/threads");
+// スクレイプ結果の置き場所(index.mjs と同じ。テスト時は SCRAPER_DATA_DIR で逃がす)
+const DATA_DIR = path.resolve(SCRAPER_DIR, process.env.SCRAPER_DATA_DIR || "../site/data");
+const DATA_PATH = path.join(DATA_DIR, "threads.json");
+const DETAIL_DIR = path.join(DATA_DIR, "threads");
 const DEFAULT_STATE_PATH = path.resolve(SCRAPER_DIR, "../.scrape-state.json");
 
 // ミラーサイト(系統①)の URL。gist の元スレにミラーリンクを併記するために使う。
@@ -60,16 +62,22 @@ function formatPost(post) {
   const labels = {
     age: "年齢",
     sex: "性別",
+    area: "住所",
     looks: "ﾙｯｸｽ",
+    style: "ｽﾀｲﾙ",
+    figure: "体型",
     wish: "区分",
     ip: "IP",
     device: "機種情報",
     email: "メール",
   };
-  const known = ["num", "name", "date", "body", "mailUrl", "images"];
+  const known = ["num", "key", "name", "date", "body", "mailUrl", "images", "email"];
   const lines = [];
   const header = [post.name, post.date].filter(Boolean).join(" ");
-  lines.push(`#### ${post.num}. ${header}`);
+  // 見出しの番号。投稿 ID(post.key)を持つ板(サブ掲示板の 1 枚板など)は
+  // レス番号が掲示板に存在しないため投稿 ID を見出しに使う
+  const heading = post.num ? `${post.num}. ` : post.key ? `ID:${post.key} ` : "";
+  lines.push(`#### ${heading}${header}`);
   for (const [key, value] of Object.entries(post)) {
     if (known.includes(key) || !value) continue;
     lines.push(`- ${labels[key] || key}: ${value}`);
@@ -228,6 +236,12 @@ async function main() {
   // スレごとの既知最終レス番号(レス単位の差分検出用)。
   // 旧形式の状態ファイルには無いため {} として扱う(その実行は新着多めになる)
   const knownPosts = state?.knownPosts ?? {};
+  // スレごとの既知投稿 ID(post.key)集合。レス番号が存在しない板(サブ掲示板の
+  // 1 枚板など。num は実行ごとに日時順で振り直されるため番号差分が使えない)向け
+  const knownKeys = state?.knownKeys ?? {};
+  // knownKeys はスレあたり最大この件数の投稿 ID を保持する(無限成長の防止。
+  // 取得窓は thread.maxPages 分なので現実にはこれより少ない)
+  const MAX_KNOWN_KEYS_PER_THREAD = 500;
 
   // 本文が空 or 2 文字以下のレスは募集削除の可能性が高いため通知から除外する
   // (基準 knownPosts には通常どおり含むため、後から 本文が変わっても
@@ -236,12 +250,14 @@ async function main() {
 
   // 新着の差分を組み立てる:
   // - 新規スレ(knownIds に無い)→ 窓内の全レスが新着
-  // - 既存スレ → 既知の最終レス番号より大きいレス番号のレスが新着
+  // - 既存スレ(レス番号のある板)→ 既知の最終レス番号より大きいレス番号のレスが新着
+  // - 既存スレ(投稿 ID(post.key)持つ板)→ 既知の投稿 ID 集合に無い投稿が新着
   // 詳細ファイルが無いスレ(本文取得失敗)はレスが拾えないため、
-  // レス番号の基準も進めない(次回に新着として通知される)
+  // 基準(レス番号・投稿 ID)も進めない(次回に新着として通知される)
   const entries = [];
   let noDetailCount = 0;
   const nextKnownPosts = { ...knownPosts };
+  const nextKnownKeys = { ...knownKeys };
   for (const thread of threads) {
     const baseline = Number(knownPosts[thread.id]) || 0;
     let posts = [];
@@ -255,6 +271,11 @@ async function main() {
       if (err.code === "ENOENT") hasDetail = false;
       else throw err;
     }
+    // 投稿 ID モードのスレか(全レスに post.key がある板。num は実行ごとに
+    // 振り直されるため番号差分では新着を判定できない)
+    const keyedMode =
+      posts.length > 0 && posts.every((p) => String(p?.key ?? "") !== "");
+    const prevKeys = new Set(keyedMode ? (knownKeys[thread.id]?.keys ?? []) : []);
     const maxNum = posts.reduce((m, p) => Math.max(m, Number(p.num) || 0), 0);
     if (!knownIds.has(thread.id)) {
       // 新規スレ: 通知できるレス(窓内・募集削除以外)があれば全レスを新着として通知する
@@ -263,6 +284,12 @@ async function main() {
         entries.push({ thread, posts: notifyPosts });
       } else {
         noDetailCount++;
+      }
+    } else if (keyedMode) {
+      // 既存スレ(投稿 ID モード): 既知の投稿 ID 集合に無い投稿が新着
+      const fresh = posts.filter((p) => !prevKeys.has(p.key) && isNotifiableBody(p));
+      if (fresh.length > 0) {
+        entries.push({ thread, posts: fresh });
       }
     } else {
       const fresh = posts.filter(
@@ -273,8 +300,22 @@ async function main() {
       }
     }
     // 基準は単調に進める(レス窓の関係で 1 回だけレスが取れない実行が
-    // あっても基準が下がらず、同じレスを重複通知しない)
+    // あっても基準が下がらず、同じレスを重複通知しない)。
+    // 投稿 ID モードは最新の窓内投稿 ID 全体を次回の基準にする
     if (maxNum > baseline) nextKnownPosts[thread.id] = maxNum;
+    if (keyedMode && hasDetail) {
+      const keys = posts.map((p) => p.key);
+      nextKnownKeys[thread.id] = {
+        keys: keys.slice(-MAX_KNOWN_KEYS_PER_THREAD),
+        at: generatedAt,
+      };
+    }
+  }
+  // 現在巡回していないスレの投稿 ID 基準は刈り込む(状態の無限成長の防止)
+  for (const id of Object.keys(nextKnownKeys)) {
+    if (!threads.some((t) => t.id === id)) {
+      delete nextKnownKeys[id];
+    }
   }
   const totalNewPosts = entries.reduce((n, e) => n + e.posts.length, 0);
   notifyNewThreads = entries.length;
@@ -319,12 +360,13 @@ async function main() {
     await mergeNotifySummary("no-new");
   }
 
-  // 現在の全スレ ID と、スレごとの既知最終レス番号を次回の「既知」として保存する
+  // 現在の全スレ ID と、スレごとの既知最終レス番号・既知投稿 ID を次回の「既知」として保存する
   const nextKnownIds = [...new Set([...knownIds, ...threads.map((t) => t.id)])];
-  await writeFile(
-    statePath,
-    JSON.stringify({ knownIds: nextKnownIds, knownPosts: nextKnownPosts }, null, 2),
-  );
+  const stateOut = { knownIds: nextKnownIds, knownPosts: nextKnownPosts };
+  if (Object.keys(nextKnownKeys).length > 0) {
+    stateOut.knownKeys = nextKnownKeys;
+  }
+  await writeFile(statePath, JSON.stringify(stateOut, null, 2));
   console.log(`[notify] 状態を保存しました (${statePath}, ${nextKnownIds.length} 件)`);
 }
 
