@@ -11,6 +11,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/workflows/deploy.yml" # ワークフロー変更だけでも Worker secret の同期を反映する
       - "site/**"
       - "worker/**"
       - "wrangler.jsonc"
@@ -57,17 +58,32 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: echo "CLOUDFLARE_API_TOKEN 未登録のためデプロイをスキップしました(Cloudflare 登録後は自動デプロイ)"
 
-      - name: Sync scraper config to Worker secret
+      - name: Sync scraper settings to Worker secrets
         # Cloudflare 未設定の間は wrangler が認証できず失敗するため、デプロイと同じくスキップ
+        # SCRAPER_CONFIG(JSON 全体)があればそれを、無ければ SCRAPER_DOMAIN /
+        # SCRAPER_SEX_EXCLUDES(バッチと同じリポジトリシークレット)を Worker secret に
+        # 同期する。Worker は SCRAPER_DOMAIN があればパス・クエリを config の
+        # targetUrl から補完して実モードになる(worker/src/scrape.ts loadConfig)。
+        # SCRAPER_CONFIG も SCRAPER_DOMAIN も無いときだけ Worker はモックモードになる
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:
           SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
+          SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
+          SCRAPER_SEX_EXCLUDES: ${{ secrets.SCRAPER_SEX_EXCLUDES }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -n "$SCRAPER_CONFIG" ]; then
-            printf '%s' "$SCRAPER_CONFIG" | npx wrangler secret put SCRAPER_CONFIG
-            echo "Worker secret SCRAPER_CONFIG を更新しました"
-          else
-            echo "SCRAPER_CONFIG が未設定のため、Worker はモックモードで動作します"
+          sync_secret() {
+            if [ -n "$2" ]; then
+              printf '%s' "$2" | npx wrangler secret put "$1"
+              echo "Worker secret $1 を更新しました"
+            else
+              echo "リポジトリシークレット $1 が未設定のため、Worker secret への同期をスキップします"
+            fi
+          }
+          sync_secret SCRAPER_CONFIG "$SCRAPER_CONFIG"
+          sync_secret SCRAPER_DOMAIN "$SCRAPER_DOMAIN"
+          sync_secret SCRAPER_SEX_EXCLUDES "$SCRAPER_SEX_EXCLUDES"
+          if [ -z "$SCRAPER_CONFIG" ] && [ -z "$SCRAPER_DOMAIN" ]; then
+            echo "::warning::SCRAPER_CONFIG / SCRAPER_DOMAIN どちらも未設定のため、Worker はモックモードで動作します"
           fi
