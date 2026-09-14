@@ -104,6 +104,11 @@ export interface Env {
   // メインスレ(directThreads)の JSON 配列。デプロイ時に設定 gist から抽出され
   // 同期される(deploy.yml)。未設定ならメインスレは取得しない
   SCRAPER_DIRECT_THREADS?: string;
+  // GitHub Actions(Actions: Write 権限の PAT)。cron から scrape.yml を
+  // workflow_dispatch で起動するために使う(deploy.yml が同期)。未設定なら cron はスキップ
+  GH_DISPATCH_TOKEN?: string;
+  // dispatch 先リポジトリ(「owner/repo」)。未設定なら既定リポジトリ
+  GH_DISPATCH_REPO?: string;
 }
 
 export function loadConfig(env: Env): BoardConfig {

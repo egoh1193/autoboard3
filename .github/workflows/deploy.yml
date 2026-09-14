@@ -65,11 +65,14 @@ jobs:
         # 同期する。Worker は SCRAPER_DOMAIN があればパス・クエリを config の
         # targetUrl から補完して実モードになる(worker/src/scrape.ts loadConfig)。
         # SCRAPER_CONFIG も SCRAPER_DOMAIN も無いときだけ Worker はモックモードになる
+        # GH_DISPATCH_TOKEN(Actions: Write 権限の PAT)は Worker cron が
+        # scrape.yml を workflow_dispatch で起動するために使う。値はログに出さない
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:
           SCRAPER_CONFIG: ${{ secrets.SCRAPER_CONFIG }}
           SCRAPER_DOMAIN: ${{ secrets.SCRAPER_DOMAIN }}
           SCRAPER_SEX_EXCLUDES: ${{ secrets.SCRAPER_SEX_EXCLUDES }}
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -84,6 +87,7 @@ jobs:
           sync_secret SCRAPER_CONFIG "$SCRAPER_CONFIG"
           sync_secret SCRAPER_DOMAIN "$SCRAPER_DOMAIN"
           sync_secret SCRAPER_SEX_EXCLUDES "$SCRAPER_SEX_EXCLUDES"
+          sync_secret GH_DISPATCH_TOKEN "$GH_DISPATCH_TOKEN"
           if [ -z "$SCRAPER_CONFIG" ] && [ -z "$SCRAPER_DOMAIN" ]; then
             echo "::warning::SCRAPER_CONFIG / SCRAPER_DOMAIN どちらも未設定のため、Worker はモックモードで動作します"
           fi

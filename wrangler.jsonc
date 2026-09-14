@@ -14,5 +14,11 @@
     "run_worker_first": ["/data/*"]
   },
   // scraper/mock/*.html を文字列として import するためのルール
-  "rules": [{ "type": "Text", "globs": ["**/*.html"] }]
+  "rules": [{ "type": "Text", "globs": ["**/*.html"] }],
+  // GitHub Actions の schedule は高頻度 cron が間引かれる(実勢 2〜4 時間おき)ため、
+  // Cloudflare Cron から workflow_dispatch で scrape.yml を 10 分おきに確実に起動する
+  // (scheduled ハンドラ。トークン GH_DISPATCH_TOKEN は deploy.yml が同期)
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  }
 }
