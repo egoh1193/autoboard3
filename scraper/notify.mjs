@@ -16,6 +16,10 @@
 //   GIST_API_URL        … gist 作成 API の URL(既定: https://api.github.com/gists)
 //                          (テスト用のダミーサーバーなどに差し替え可能)
 //   STATE_PATH          … 状態ファイルのパス(既定: リポジトリ直下の .scrape-state.json)
+//   MIRROR_URL          … ミラーサイト(系統①)の URL。設定すると gist の元スレに
+//                          ミラーリンク(/thread?id=…)を併記する。未設定なら
+//                          ミラーリンクは出さない(リポジトリは public のため、
+//                          URL はコードに埋め込まずシークレット/.env で渡す)
 //
 // DISCORD_WEBHOOK_URL / GIST_TOKEN が未設定なら投稿をスキップし、状態ファイルも
 // 更新しない(=設定後に新着として通知される)。Gist は秘密 gist(public: false)で
@@ -31,6 +35,10 @@ const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DATA_PATH = path.resolve(SCRAPER_DIR, "../site/data/threads.json");
 const DETAIL_DIR = path.resolve(SCRAPER_DIR, "../site/data/threads");
 const DEFAULT_STATE_PATH = path.resolve(SCRAPER_DIR, "../.scrape-state.json");
+
+// ミラーサイト(系統①)の URL。gist の元スレにミラーリンクを併記するために使う。
+// 未設定ならミラーリンクは出さない(リポジトリが public のため URL は埋め込まない)
+const MIRROR_URL = (process.env.MIRROR_URL || "").trim().replace(/\/+$/, "");
 
 // gist URL は秘密 gist とはいえ URL を知れば閲覧可のため、
 // ローカル・CI を問わずログには出さない(投稿済みの件数だけを表示する)
@@ -129,6 +137,10 @@ function buildGistContent({ entries, generatedAt, isFirstRun, totalThreads, noDe
       lines.push(`### 元スレ: ${thread.title || "(タイトルなし)"}`);
       lines.push("");
       lines.push(`- URL: ${thread.url}`);
+      // ミラーサイトのスレ詳細(本体 URL が取れない閲覧環境向け)
+      if (MIRROR_URL) {
+        lines.push(`- ミラー: ${MIRROR_URL}/thread?id=${encodeURIComponent(thread.id)}`);
+      }
       if (thread.category) lines.push(`- カテゴリ: ${thread.category}`);
       lines.push("");
       for (const post of posts) {

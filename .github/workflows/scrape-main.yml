@@ -74,6 +74,8 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          # ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンクを併記
+          MIRROR_URL: ${{ secrets.MIRROR_URL }}
         run: npm run notify
 
       - name: Save new-thread detection state

@@ -104,6 +104,8 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          # ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンクを併記
+          MIRROR_URL: ${{ secrets.MIRROR_URL }}
           RUN_SUMMARY_JSON: /tmp/run-summary.json
         run: npm run notify
 

@@ -66,6 +66,7 @@ cp scraper/config.example.json scraper/config.json
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID |
 | `SCRAPER_CONFIG` | `scraper/config.json` の中身を JSON 文字列として貼り付け(省略時はモックモード) |
 | `GIST_TOKEN` | **gist 権限を持つ GitHub PAT**(新着スレ詳細の gist 投稿に使用。※ Actions 既定の `GITHUB_TOKEN` では gist を作成できないため、個人の PAT が必要) |
+| `MIRROR_URL` | ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンク(`/thread?id=…`)を併記する(未設定なら出さない) |
 | `DISCORD_WEBHOOK_URL` | Discord チャンネルの webhook URL(gist の URL を投稿する宛先) |
 
 `scraper/config.json` 自体は `.gitignore` でコミット対象外のため、シークレット経由で Actions / Worker に渡す:
