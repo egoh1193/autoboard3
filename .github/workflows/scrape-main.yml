@@ -12,15 +12,16 @@ name: Scrape and notify (main threads)
 #   (scrape.yml)は SCRAPER_SKIP_DIRECT=1 で直接指定スレをスキップしている
 # - 実行統計は Actions ログでのみ確認する(件数のみ。log/latest-run.md には
 #   書かない。複数 workflow が同じファイルを更新すると競合するため)
-# - 起動は 1 日 3 回(JST 15 / 18 / 21 時頃)。GitHub Actions の schedule は
-#   間引きされることがあるため、指定時刻から遅れる場合がある
+# - 起動は 30 分おき(schedule)。GitHub Actions の schedule は間引きされる
+#   ことがあるため、指定時刻から遅れる・起動がスキップされる場合がある。
+#   確実に起動したい場合は Worker cron(workflow_dispatch、GH_DISPATCH_TOKEN
+#   シークレットが必要)が 10 分おきに dispatch するのでそちらが主経路
 
 on:
   schedule:
-    # 1 日 3 回(JST 15:07 / 18:07 / 21:07)。cron は UTC 指定のため
-    # JST 15 / 18 / 21 時は UTC 6 / 9 / 12 時。分を 07 にずらすのは
-    # :00 の起動集中・間引きを避けるため(前後数分の起動遅れはあり得る)
-    - cron: "7 6,9,12 * * *"
+    # 30 分おき。cron は UTC 指定。分を 17/47 にずらすのは
+    # :00 / :30 の起動集中・間引きを避けるため(前後数分の起動遅れはあり得る)
+    - cron: "17,47 * * * *"
   workflow_dispatch:
 
 concurrency:
