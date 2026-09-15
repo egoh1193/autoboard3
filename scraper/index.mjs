@@ -38,6 +38,8 @@ import {
 } from "./parse.mjs";
 // /map 機能用のピン計算(地名対応表 config.map から緯度経度を決める)
 import { pinForPost } from "./map.mjs";
+// 設定 gist の読み込み(設定が未設定時に各値を読み込む)
+import { fetchGistSettingsJson } from "./gist-settings.mjs";
 
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
 // 出力先(site/data に JSON 生成)。テスト時は SCRAPER_DATA_DIR で
@@ -97,57 +99,14 @@ function splitList(value) {
   return [];
 }
 
-// 設定 gist の URL(gist.github.com/<user>/<id> など)または gist ID から ID を取り出す。
-// ID 自体も公開ログには出さないため、失敗時のメッセージに含めない
-function gistIdFromUrl(raw) {
-  const trimmed = raw.trim();
-  if (!trimmed.includes("://")) return trimmed; // gist ID 直接指定も許容
-  try {
-    const parts = new URL(trimmed).pathname.split("/").filter(Boolean);
-    // gist.githubusercontent.com/<user>/<id>/raw/... 形式なら第2要素が ID
-    if (new URL(trimmed).hostname === "gist.githubusercontent.com") {
-      return parts[1] ?? "";
-    }
-    return parts[parts.length - 1] ?? "";
-  } catch {
-    return "";
-  }
-}
-
 // 設定 gist(シークレット SCRAPER_SETTINGS_GIST_URL)から巡回設定を読み込む。
 // gist 内の最初の .json ファイルに {"keywords": [...], "sexExcludes": [...],
-// "blackList": [...]} を書く。
+// "blackList": [...], "mirrorUrl": "..."} を書く。
 // 秘密 gist を読むため GIST_TOKEN(PAT)があれば付ける。
 // URL・ID・取得内容はログに出さない(URL を知れば閲覧可のため)
 async function loadGistSettings() {
-  const raw = process.env.SCRAPER_SETTINGS_GIST_URL;
-  if (!raw) return null;
-  const id = gistIdFromUrl(raw);
-  if (!id) {
-    throw new Error("SCRAPER_SETTINGS_GIST_URL を gist ID として解釈できませんでした");
-  }
-  const base = (process.env.GIST_API_URL || "https://api.github.com/gists").replace(/\/$/, "");
-  const headers = { Accept: "application/vnd.github+json", "User-Agent": "board-mirror-scraper" };
-  if (process.env.GIST_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GIST_TOKEN}`;
-  }
-  const res = await fetch(`${base}/${id}`, { headers });
-  if (!res.ok) {
-    throw new Error(`設定 gist の取得に失敗しました (HTTP ${res.status})`);
-  }
-  const data = await res.json();
-  const jsonFile = Object.values(data.files ?? {}).find(
-    (f) => typeof f?.content === "string" && f?.filename?.endsWith(".json"),
-  );
-  if (!jsonFile) {
-    throw new Error("設定 gist に JSON ファイルが見つかりませんでした");
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonFile.content);
-  } catch (err) {
-    throw new Error(`設定 gist の JSON を解釈できませんでした: ${err.message}`);
-  }
+  const parsed = await fetchGistSettingsJson();
+  if (!parsed) return null;
   return {
     // キーワード・性別排除は文字列専用(部分一致のキーワード)
     keywords: splitList(parsed.keywords).filter((v) => typeof v === "string"),

@@ -17,9 +17,11 @@
 //                          (テスト用のダミーサーバーなどに差し替え可能)
 //   STATE_PATH          … 状態ファイルのパス(既定: リポジトリ直下の .scrape-state.json)
 //   MIRROR_URL          … ミラーサイト(系統①)の URL。設定すると gist の元スレに
-//                          ミラーリンク(/thread?id=…)を併記する。未設定なら
-//                          ミラーリンクは出さない(リポジトリは public のため、
-//                          URL はコードに埋め込まずシークレット/.env で渡す)
+//                          ミラーリンク(/thread?id=…)を併記する。設定 gist の
+//                          mirrorUrl でも指定できる(優先順: 環境変数 > gist)。
+//                          未設定ならミラーリンクは出さない(リポジトリは
+//                          public のため、URL はコードに埋め込まず
+//                          シークレット/.env/gist で渡す)
 //
 // DISCORD_WEBHOOK_URL / GIST_TOKEN が未設定なら投稿をスキップし、状態ファイルも
 // 更新しない(=設定後に新着として通知される)。Gist は秘密 gist(public: false)で
@@ -30,6 +32,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// 設定 gist の読み込み(mirrorUrl のフォールバック用)
+import { fetchGistSettingsJson } from "./gist-settings.mjs";
 
 const SCRAPER_DIR = path.dirname(fileURLToPath(import.meta.url));
 // スクレイプ結果の置き場所(index.mjs と同じ。テスト時は SCRAPER_DATA_DIR で逃がす)
@@ -39,8 +43,26 @@ const DETAIL_DIR = path.join(DATA_DIR, "threads");
 const DEFAULT_STATE_PATH = path.resolve(SCRAPER_DIR, "../.scrape-state.json");
 
 // ミラーサイト(系統①)の URL。gist の元スレにミラーリンクを併記するために使う。
-// 未設定ならミラーリンクは出さない(リポジトリが public のため URL は埋め込まない)
-const MIRROR_URL = (process.env.MIRROR_URL || "").trim().replace(/\/+$/, "");
+// 優先順: リポジトリシークレット/環境変数 MIRROR_URL > 設定 gist の mirrorUrl。
+// どちらも未設定ならミラーリンクは出さない(リポジトリが public のため URL は
+// 埋め込まない)
+function normalizeUrlTail(url) {
+  return String(url ?? "").trim().replace(/\/+$/, "");
+}
+
+// ミラー URL の解決。設定 gist(mirrorUrl)は補助的なので、読み込みに失敗しても
+// 実行は中止しない(ミラーリンクなしで続行)。URL 自体はログに出さない
+async function resolveMirrorUrl() {
+  const envUrl = normalizeUrlTail(process.env.MIRROR_URL || "");
+  if (envUrl) return envUrl;
+  try {
+    const gist = await fetchGistSettingsJson();
+    return normalizeUrlTail(gist?.mirrorUrl ?? "");
+  } catch (err) {
+    console.warn(`[notify] 警告: 設定 gist の読み込みに失敗したためミラーリンクなしで続行します: ${err.message}`);
+    return "";
+  }
+}
 
 // gist URL は秘密 gist とはいえ URL を知れば閲覧可のため、
 // ローカル・CI を問わずログには出さない(投稿済みの件数だけを表示する)
@@ -116,7 +138,7 @@ function groupPostsByAuthor(entries) {
 
 // 新着投稿一覧を「投稿者ごと」に組み立てて Gist に投稿する Markdown を作る。
 // 各レスの見出しに元投稿スレ(タイトル・URL)を付与する
-function buildGistContent({ entries, generatedAt, isFirstRun, totalThreads, noDetailCount }) {
+function buildGistContent({ entries, generatedAt, isFirstRun, totalThreads, noDetailCount, mirrorUrl = "" }) {
   const byAuthor = groupPostsByAuthor(entries);
   const postCount = entries.reduce((n, e) => n + e.posts.length, 0);
   const lines = [];
@@ -146,8 +168,8 @@ function buildGistContent({ entries, generatedAt, isFirstRun, totalThreads, noDe
       lines.push("");
       lines.push(`- URL: ${thread.url}`);
       // ミラーサイトのスレ詳細(本体 URL が取れない閲覧環境向け)
-      if (MIRROR_URL) {
-        lines.push(`- ミラー: ${MIRROR_URL}/thread?id=${encodeURIComponent(thread.id)}`);
+      if (mirrorUrl) {
+        lines.push(`- ミラー: ${mirrorUrl}/thread?id=${encodeURIComponent(thread.id)}`);
       }
       if (thread.category) lines.push(`- カテゴリ: ${thread.category}`);
       lines.push("");
@@ -334,12 +356,14 @@ async function main() {
   }
 
   if (entries.length > 0) {
+    const mirrorUrl = await resolveMirrorUrl();
     const content = buildGistContent({
       entries,
       generatedAt,
       isFirstRun: state === null,
       totalThreads: threads.length,
       noDetailCount,
+      mirrorUrl,
     });
     const stamp = new Date(generatedAt).toISOString().replace(/[:.]/g, "-");
     const gistUrl = await createGist(

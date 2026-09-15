@@ -1,0 +1,159 @@
+// 巡回設定 gist のサンプル(系統②バッチ・系統③自動投稿・Discord 通知の設定)。
+//
+// 【使い方】
+//   1. この内容を「秘密 gist」の最初の .json ファイルに貼る
+//   2. gist の URL をリポジトリシークレット SCRAPER_SETTINGS_GIST_URL に登録
+//   3. ※ コメントは読むためのもの。**gist に貼るときは // 行を全部削除して
+//        正しい JSON にしてから貼ること**(コメント付きのままだと
+//        「設定 gist の JSON を解釈できませんでした」で実行が止まる)
+//
+// 【構造】ルートの各キーは「未設定時に読み込まれる」だけなので、使わないキーは
+//   消してよい。優先順: 環境変数 / リポジトリシークレット > gist > config.json
+// 【共通】URL・ドメイン・ID・投稿内容はすべて設定用プレースホルダ(実在しない値)。
+//   投稿内容・トークン等の秘密情報を含むため gist は必ず秘密(secret) gist にする。
+//   gist の URL・ID・内容はログには出さない
+{
+  // ── スレ検索キーワード ──────────────────────────────
+  // 地名など。1 キーワード = 1 スレ検索 URL(カンマ区切りの文字列でもよい)。
+  // SCRAPER_KEYWORDS 環境変数があればこちらより優先。
+  // 未設定なら keywords 検索なしで一覧 + directThreads のみを巡回する
+  "keywords": ["梅田", "天王寺"],
+
+  // ── 性別排除 ──────────────────────────────
+  // 性別メタに部分一致するキーワードを含むレスを出力から除外
+  // (SCRAPER_SEX_EXCLUDES 環境変数と同じ。カンマ区切りの文字列でも可)
+  "sexExcludes": ["女性"],
+
+  // ── ブラックリスト(除外する投稿者)──────────────────────────────
+  // mailList: メールアドレス完全一致(大文字小文字・空白は無視)
+  // keywordList: 投稿本文への部分一致。
+  //   keyword + mail 併記は AND 条件(メールだけ変えた同じ広告を落とす用)。
+  // ※ メールアドレスは個別メールページ取得後に確定するためバッチ(系統②)専用の
+  //   フィルタ(Worker のサイト表示はブラックリストに含まれる点に注意)
+  // ※ 配列形式(従来)でも書ける:
+  //     "blackList": ["spam@example.com", { "keyword": "…" }]
+  "blackList": {
+    "mailList": ["spam@example.com"],
+    "keywordList": [
+      "広告本文に含まれるキーワード",
+      { "keyword": "本文キーワード", "mail": "ad@example.com" }
+    ]
+  },
+
+  // ── ミラーサイトの URL ──────────────────────────────
+  // 系統①(Worker)のデプロイ URL。設定すると Discord 通知の gist の
+  // 「元スレ」にミラーリンク(/thread?id=…)を併記する。
+  // リポジトリシークレット MIRROR_URL があればこちらより優先される。
+  // どちらも未設定ならミラーリンクは出ない
+  "mirrorUrl": "https://your-worker.example.workers.dev",
+
+  // ── メインスレ(一覧を経由せず毎回巡回するスレ)──────────────
+  // 要素は URL 文字列だけでもよい。URL は config.json の targetUrl 基準で
+  // 相対解決される(https:// 始まりの別ドメイン URL も可)
+  "directThreads": [
+    // 従来型のメインスレ(スレ URL の直接指定)
+    "https://hoge.com/public/thread/index?id=89547",
+
+    // オブジェクト形式:
+    //   newestFirst: p=1 が最新の降順ページングのスレ
+    //   maxPages / maxAgeDays: スレ単位の上限上書き(maxAgeDays: 0 で範囲制限なし)
+    {
+      "url": "/public/thread/index?id=89547",
+      "title": "梅田の飲み会スレ",
+      "newestFirst": true,
+      "maxPages": 3,
+      "maxAgeDays": 2
+    },
+
+    // サブ掲示板(別ドメイン・別エンジンの 1 枚板)の例:
+    //   id: スレ ID の明示指定(id クエリを持たない板ページ URL 向け)。
+    //       **一度決めたら変えない**(通知の既知基準・ミラー URL がスレ ID 基準。
+    //       変えると過去分が再度新着通知される)
+    //   mockFile: モックモード時に使う scraper/mock/ 以下の HTML ファイル名
+    //   category: 一覧のカテゴリ表示名
+    //   thread: 板ごとのパーサ設定(下の threadConfigs の名前参照。オブジェクト
+    //       のインライン指定でもよい)。サブ板は 1 枚板(レス番号なし)のため
+    //       新着判定は投稿 ID(post.key = 通報リンクの URL から抽出)で行う
+    {
+      "url": "https://board.example.net/board/search/3/13/1/1",
+      "id": "sub-b3",
+      "title": "サブ板の新着投稿",
+      "category": "サブ板",
+      "maxPages": 2,
+      "maxAgeDays": 7,
+      "mockFile": "sample-panel-board.html",
+      "thread": "panelBoard"
+    }
+  ],
+
+  // ── 板ごとのパーサ設定(directThreads の thread で名前参照)──────
+  // 同じ板の設定を directThreads 要素ごとに複製せずに済む(将来のスレ追加は
+  // directThreads に要素 1 行追加するだけ)。サブ板の各セレクタの意味:
+  //   postsSelector: 投稿 1 件ごとを囲む要素
+  //   fields: 投稿内の各値。「CSSセレクタ@属性」形式(@textbr は <br> を改行化)
+  //   fieldPatterns: 投稿要素のテキストへの正規表現抽出(キャプチャ (1) を使う)
+  //   imagesSpec: 添付画像 URL(全件マッチ → post.images 配列)
+  //   keySpec / keyPattern: 投稿 ID(通報リンクの URL から。新着判定・重複排除のキー)
+  //   nextPage: 「次」ページへのリンク(ページ番号が URL パスセグメントの板でも
+  //       このリンク追従でページ送りできる)
+  // 日時は「2026.09.15(火) 02:00」形式にも対応済み。
+  // email は mailto: 直リンクから自動確定(個別メールページが存在しない板向け)
+  "threadConfigs": {
+    "panelBoard": {
+      "postsSelector": "div.panel-board",
+      "fields": {
+        "name": ".panel-head a@text",
+        "email": ".panel-head a[href^='mailto:']@href",
+        "date": ".panel-time@text",
+        "body": ".panel-mess@textbr"
+      },
+      "fieldPatterns": {
+        "area": "住所[：:]([^\\]]*)",
+        "age": "年齢[：:]([^\\]]*)",
+        "style": "ｽﾀｲﾙ[：:]([^\\]]*)",
+        "figure": "体型[：:]([^\\]]*)"
+      },
+      "imagesSpec": ".panel-image-item a@href",
+      "keySpec": ".panel-footer a@href",
+      "keyPattern": "/board/report/\\d+/([^/]+)/",
+      "nextPage": "ul.pagination li.page-item a@href"
+    }
+  },
+
+  // ── 系統③: 自動投稿 ──────────────────────────────
+  // 1 系統(オブジェクト)でも複数(配列)でも書ける。各系統は投稿先・間隔・
+  // 投稿内容を独立に持ち、投稿状態(前回投稿時刻・ローテ番号)も系統ごとに管理。
+  // post.yml が 1 時間おきに起動し、前回試行から intervalMinutes 未経過なら何もしない。
+  // 投稿内容(名前・メール・本文・編集キー)はログに絶対に出さない(件数のみ)
+  "post": [
+    {
+      // 省略可(状態のキー。省略時は #0, #1 …)
+      "name": "飲み会系統",
+      // false でこの系統を無効化
+      "enabled": true,
+      // 投稿先スレの ID
+      "threadIds": ["89547"],
+      // 投稿フォームページのパス({id} をスレ ID で置換)
+      "formPath": "/public/comment/?id={id}",
+      // 投稿間隔(分)。前回の試行(成否問わず)からこの間隔ごとに 1 回投稿
+      "intervalMinutes": 180,
+      // 投稿内容のパターン(順にローテーションして同じ文面の連投を避ける)
+      "posts": [
+        {
+          // フォームの name 属性 → 値(text/textarea は fill、select は値、
+          // checkbox は true/false)。
+          // 画像認証 image_auth は設定不要(フォーム内の認証画像の数字を
+          // 表示順に並べて自動入力)。画像アップロードは未対応
+          "fields": {
+            "name": "投稿者名(サンプル)",
+            "email": "poster@example.com",
+            "content": "投稿本文のサンプルです。同じ文面の連投を避けるため posts を順にローテーションします。",
+            "edit_password": "編集キー(サンプル)"
+          },
+          // sage チェックボックス(任意)
+          "sage": true
+        }
+      ]
+    }
+  ]
+}
