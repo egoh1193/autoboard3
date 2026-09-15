@@ -208,10 +208,25 @@ async function createGist(token, apiUrl, filename, description, content) {
 // Discord に投稿する短いメッセージ(本文・スレタイは載せず gist URL のみ)。
 // 詳細はすべて gist 側に任せる。
 // メインスレ専用実行(SCRAPER_DIRECT_ONLY=1・scrape-main.yml)のときは
-// 見出しに「メインスレ」を付けて地域別巡回と区別する
-function buildDiscordMessage(gistUrl) {
-  const label = process.env.SCRAPER_DIRECT_ONLY === "1" ? "メインスレ" : "";
-  return `${label ? label + "の" : ""}更新がありました。\n${gistUrl}`;
+// 見出しに「メインスレ」を付けて地域別巡回と区別する。
+// それ以外(地域別巡回)は新着のあったスレのカテゴリ(キーワード検索なら
+// 地名)を併記する(例: 「地域スレに更新がありました(梅田,天王寺)」)。
+// カテゴリ付きスレが 1 件もなければ従来どおり「更新がありました。」。
+// ※ Discord webhook は非公開チャンネル向けのため地名を載せてよい
+//   (Actions ログには出さない)
+function buildDiscordMessage(gistUrl, entries = []) {
+  if (process.env.SCRAPER_DIRECT_ONLY === "1") {
+    return `メインスレの更新がありました。\n${gistUrl}`;
+  }
+  const categories = [
+    ...new Set(
+      entries
+        .map((e) => (e.thread.category ?? "").trim())
+        .filter((c) => c !== "" && c !== "(直接指定)"),
+    ),
+  ];
+  const label = categories.length > 0 ? `地域スレに更新がありました(${categories.join(",")})` : "更新がありました。";
+  return `${label}\n${gistUrl}`;
 }
 
 async function postToDiscord(webhookUrl, content) {
@@ -376,7 +391,7 @@ async function main() {
     // gist URL はログに出さない(URL を知れば閲覧可のため。ローカル・CI 共通)
     console.log(`[notify] Gist を作成しました(新着 ${entries.length} スレ / ${totalNewPosts} レス)`);
 
-    await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl));
+    await postToDiscord(webhookUrl, buildDiscordMessage(gistUrl, entries));
     console.log("[notify] Discord に gist URL を投稿しました");
     await mergeNotifySummary("posted");
   } else {
