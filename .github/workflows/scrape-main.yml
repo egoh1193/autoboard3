@@ -75,6 +75,8 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          # 設定 gist の読み込み(mirrorUrl があれば元スレにミラーリンクを併記)
+          SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
           # ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンクを併記
           MIRROR_URL: ${{ secrets.MIRROR_URL }}
           # この実行がメインスレ専用であることを notify に伝える
