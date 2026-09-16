@@ -251,6 +251,7 @@ async function mergeNotifySummary(status) {
       status,
       newThreads: notifyNewThreads,
       newPosts: notifyNewPosts,
+      mirror: notifyMirror,
     };
     await writeFile(summaryPath, JSON.stringify(summary, null, 2));
   } catch (err) {
@@ -260,6 +261,7 @@ async function mergeNotifySummary(status) {
 
 let notifyNewThreads = 0;
 let notifyNewPosts = 0;
+let notifyMirror = "unconfigured";
 
 async function main() {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -370,8 +372,18 @@ async function main() {
     return;
   }
 
+  // ミラー URL の解決(シークレット MIRROR_URL > 設定 gist の mirrorUrl)。
+  // 未設定なら警告を出す(値はログに出さない。設定有無のみをサマリに記録するので
+  // log/latest-run.md で設定漏れに気付ける)
+  const mirrorUrl = await resolveMirrorUrl();
+  notifyMirror = mirrorUrl ? "configured" : "unconfigured";
+  if (!mirrorUrl) {
+    console.warn(
+      "[notify] 警告: ミラー URL が未設定のため gist にミラーリンクを載せません(シークレット MIRROR_URL または設定 gist の mirrorUrl を設定してください)",
+    );
+  }
+
   if (entries.length > 0) {
-    const mirrorUrl = await resolveMirrorUrl();
     const content = buildGistContent({
       entries,
       generatedAt,

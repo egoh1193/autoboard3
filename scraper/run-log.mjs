@@ -78,6 +78,12 @@ export function buildRunLog(s) {
         ? `(新着 ${notify.newThreads ?? 0} スレ / ${notify.newPosts ?? 0} レス)`
         : "";
     lines.push(`- 通知: ${NOTIFY_LABELS[notify.status] ?? notify.status}${counts}`);
+    // ミラー URL の設定有無(URL 自体は public ログに載せない)
+    if (notify.mirror === "configured") {
+      lines.push("- ミラー: 設定あり(通知 gist にミラーリンクを併記)");
+    } else if (notify.mirror === "unconfigured") {
+      lines.push("- ミラー: 未設定(MIRROR_URL シークレットまたは設定 gist の mirrorUrl で設定)");
+    }
   } else {
     lines.push("- 通知: 情報なし");
   }
