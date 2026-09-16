@@ -71,14 +71,40 @@ jobs:
           SCRAPER_DIRECT_ONLY: "1"
         run: npm run scrape
 
+      - name: Resolve mirror URL
+        # ミラー(系統①)の URL を自動解決して GITHUB_ENV の MIRROR_URL に渡す。
+        # 1) シークレット MIRROR_URL があればそれをそのまま使う(手動設定が優先)
+        # 2) なければ Cloudflare API で workers.dev のサブドメインを取得し、
+        #    wrangler.jsonc の Worker 名から URL を組み立てる
+        # URL の値はログに出さない(失敗時は警告のみで続行)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MIRROR_URL: ${{ secrets.MIRROR_URL }}
+        run: |
+          if [ -z "$MIRROR_URL" ]; then
+            NAME=$(node -e 'const s=require("fs").readFileSync("wrangler.jsonc","utf8");const m=s.match(/"name"\s*:\s*"([^"]+)"/);console.log(m?m[1]:"")')
+            SUB=$(curl -s --fail-with-body -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).result?.subdomain??"")}catch{console.log("")}})') || SUB=""
+            if [ -n "$NAME" ] && [ -n "$SUB" ]; then
+              echo "MIRROR_URL=https://$NAME.$SUB.workers.dev" >> "$GITHUB_ENV"
+              echo "ミラー URL を自動解決しました(workers.dev)"
+            else
+              echo "::warning::ミラー URL を自動解決できませんでした(シークレット MIRROR_URL でも設定できます)"
+            fi
+          else
+            echo "シークレット MIRROR_URL を使用します"
+            echo "MIRROR_URL=$MIRROR_URL" >> "$GITHUB_ENV"
+          fi
+
       - name: Notify (Gist + Discord)
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           # 設定 gist の読み込み(mirrorUrl があれば元スレにミラーリンクを併記)
           SCRAPER_SETTINGS_GIST_URL: ${{ secrets.SCRAPER_SETTINGS_GIST_URL }}
-          # ミラーサイト(系統①)の URL。設定すると gist の元スレにミラーリンクを併記
-          MIRROR_URL: ${{ secrets.MIRROR_URL }}
+          # ミラーサイト(系統①)の URL。前のステップで自動解決 or シークレットを
+          # GITHUB_ENV に設定済み(未設定なら gist の mirrorUrl、それもなければ
+          # ミラーリンクなし)。URL の値はログには出さない
           # この実行がメインスレ専用であることを notify に伝える
           # (Discord の見出しが「メインスレの更新がありました。」になる)
           SCRAPER_DIRECT_ONLY: "1"
